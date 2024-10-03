@@ -4,7 +4,12 @@
 
 **Goal:** Leverage collective effort to create a dataset and train an AI assistant to better understand and solve hard blockchain-related tasks.
 
-This project involves three stages: Dataset Creation, Dataset Evaluation, and AI-Assistant Tuning. Below are the detailed guidelines, evaluation criteria, and rubrics for each stage.
+This project involves three stages: 
+- Dataset Creation
+- Dataset Evaluation
+- AI-Assistant Tuning
+
+Below are the detailed guidelines, evaluation criteria, and rubrics for each stage.
 
 ## **Stage 1: Dataset Creation**
 
