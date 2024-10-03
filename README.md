@@ -14,7 +14,13 @@ Below are the detailed guidelines, evaluation criteria, and rubrics for each sta
 ## **Stage 1: Dataset Creation**
 
 ### **Task**
-In this stage, you will create a dataset consisting of challenging tasks for GPT-4o and their solutions. Specifically, your goal is to find tasks related to the course material where GPT-4o does not perform well when directly provided with all course content. These "hard tasks" should represent problems that require more sophisticated problem-solving or deeper understanding than GPT-4o currently demonstrates.
+In this stage, you will create a dataset consisting of challenging tasks for GPT-4o and their solutions. Specifically, your goal is to find tasks related to the course material of COS/ECE-470 where GPT-4o does not perform well when directly provided with all course content. These "hard tasks" should represent problems that require more sophisticated problem-solving or deeper understanding than GPT-4o currently demonstrates. 
+
+Possible directions for designing such tasks include:
+(1) Tasks that GPT fails on or produces misleading answers, when you use GPT for assistance in accomplishing homework/assignments.
+(2) Planning tasks for coding assignments (e.g. how to structurize the repository when building the Bitcoin Client from scratch).
+(3) Reasoning tasks for homeworks (e.g. Any questions regarding lecture notes or homeworks that GPT fails to answer correctly). 
+(4) Any other tasks you find interesting within the scope of this course that GPT doesn't perform well on. 
 
 ### **Submission Format**
 1. **Baseline Performance Log:** Submit a full chat history showing GPT-4o's baseline performance. This must use all course materials in the prompt without alteration to ensure consistency.
