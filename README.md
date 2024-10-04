@@ -18,6 +18,8 @@ Before the project, each group will sign up for subcategories where their focus 
 - Category 4: Coding Assignment 6-8: Putting everything together **(2% extra credit)**;
 - Category 5: Beyond the course: Anything you find interesting and appropriate to include in this course but not covered yet, e.g. suggesting extensive reading for students who want to learn more about a topic.
 
+At most 6 groups are allowed for each subcategory.
+
 Below are the detailed guidelines, evaluation criteria, and rubrics for each stage.
 
 
