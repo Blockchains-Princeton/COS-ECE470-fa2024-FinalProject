@@ -17,7 +17,7 @@ Before the project, each group will sign up for the categories.
 Below are the detailed guidelines, evaluation criteria, and rubrics for each stage.
 
 
-## **Stage 1: Dataset Creation (32%) **
+## Stage 1: Dataset Creation (32%) 
 
 ### **Task**
 In this stage, you will create a dataset consisting of challenging tasks for GPT-4o and their solutions. Specifically, your goal is to find tasks related to the course material of COS/ECE-470 where GPT-4o does not perform well when directly provided with all course content. These "hard tasks" should represent problems that require more sophisticated problem-solving, deeper understanding, or clearer step-by-step instructions than GPT-4o currently demonstrates. 
