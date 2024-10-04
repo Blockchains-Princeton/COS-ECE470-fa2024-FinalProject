@@ -57,7 +57,7 @@ Data entries will be collected via Google Forms.
 ### **Deliverables**
 Each group should submit at least 10 data entries. Due date: Oct 24, 10pm. 
 
-### **Grading Criteria for Stage 1 (for a total of 40%)**
+### **Grading Criteria for Stage 1 (for a total of 32%)**
 - **Completeness (16%)**: At least 10 data entries are submitted by each group. All required components (baseline log, solution, rationale) are included and well-documented.
 - **Quality of Solution (4%)**: The solution should clearly explain the reasoning, with a step-by-step approach that makes it easy for others to understand.
 - **Usefulness of Rationale (4%)**: The rationale should explain why the solution provides a learning opportunity for the AI, with specific insights into how it helps GPT-4o overcome current limitations.
