@@ -11,8 +11,12 @@ This project involves three stages:
 
   
 **Categories:**
-Before the project, each group will sign up for the categories.
-
+Before the project, each group will sign up for subcategories where their focus will be on creating tasks and solving the tasks with AI inside the subcategory.
+- Category 1: Lecture contents and homework questions, e.g. creating new questions for homework based on lecture contents;
+- Category 2: Coding Assignment 1-3: Implementing basic structures for blockchains;
+- Category 3: Coding Assignment 4-5: Mining and Network;
+- Category 4: Coding Assignment 6-8: Putting everything together **(2% extra credit)**;
+- Category 5: Beyond the course: Anything you find interesting and appropriate to include in this course but not covered yet, e.g. suggesting extensive reading for students who want to learn more about a topic.
 
 Below are the detailed guidelines, evaluation criteria, and rubrics for each stage.
 
