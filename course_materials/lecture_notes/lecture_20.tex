@@ -1,0 +1,293 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{markdown}
+\usepackage{amsthm}
+\usepackage{listings}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\newcommand{\indicator}{{\bf 1}}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\xw}[1]{{\color{green}
+\footnotesize[Xuechao: #1] }}
+\newcommand{\surya}[1]{{\color{magenta}
+\footnotesize[Surya: #1] }}
+%\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+%\let\proof\relax
+%\let\endproof\relax 
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 20}
+\cfoot{\thepage}
+
+\title{Lecture 20: Blockchain Computer of Ethereum}
+\author{Principles of Blockchains, University of Illinois,  \\ Professor:  Pramod Viswanath \\ Scribe: Yichi Zhang, Suryanarayana Sankagiri}
+\date{April 6, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Ethereum Virtual Machine (EVM) is the global virtual computer whose state every participant on the Ethereum network stores and agrees on. Any participant can request the execution of arbitrary code on the EVM; code execution changes the state of the EVM. The Ethereum Virtual Machine is the runtime environment for smart contracts in Ethereum. Ethereum's state is a large data structure which holds not only all accounts and balances, but a machine state, which can change from block to block according to a pre-defined set of rules, and which can execute arbitrary machine code. The specific rules of changing state from block to block are defined by the EVM.
+\end{abstract}
+
+%\section*{Smart Contracts}
+
+\section*{Blockchain as a Decentralized Computer}
+In this course so far, we have studied many blockchain consensus protocols, such as the longest-chain protocol, Prism, Streamlet and Hotstuff. Such protocols allow mutually distrustful parties to agree on an ordered list of transactions. The canonical use-case of such a protocol is to implement a currency system. In such a system, the transactions merely record the transfer of money from one account (or public-key) to another. However, a blockchain protocol can be used as the basis of a much more powerful abstraction: a decentralized computer. The Ethereum blockchain implements such an abstraction; this system is called an Ethereum Virtual Machine or EVM.
+
+To understand blockchains as a virtual computer, we must generalize certain notions pertaining to blockchains. Firstly, we broaden out understanding of the \textit{state} of a blockchain. In a currency system, the state is simply a record of the money held in each account at any point in time. In the case of EVM, the state can be thought of as the information that is stored on a computer. At a high level, the state is a database that contains some useful data in some specific form, and also contains a list of executable programs. As we shall see, in EVM, the account data is a subset of all recorded data. As before, all nodes in the network store a local copy of the state. The longest-chain protocol is a consensus mechanism that ensures that all nodes have a consistent state.
+
+Next, we view each transaction as a request to make a change in the blockchain state. Transactions that we saw earlier, i.e., one that records a transfer of currency, is simply a special case of such a transaction. Such a transaction reduces the account balance of the sender and raises the balance of the recipient. However, transactions could have more complex instructions, such as: ``transfer $10 \text{ETH}$ from account $A$ to $B$ if account $B$ has less than $10 \text{ETH}$; else, transfer $10 \text{ETH}$ to account $C$". Generalizing further, a transaction is an instruction (i.e., a request) to perform some computation on the current state of the blockchain and return a new state. Figure \ref{fig:blockchain_computer} illustrates this concept. 
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/blockchain_computer.png}
+    \caption{Transactions change the world state, i.e., the state of the blockchain global computer}
+    \label{fig:blockchain_computer}
+\end{figure}
+
+Just as in Bitcoin, any participant can broadcast a transaction, i.e., a request for the EVM to perform some arbitrary computation. Upon seeing such a transaction, a miner executes the computation and checks that it leads to a valid state transition (e.g., it doesn't lead to any account balance going negative). It then includes the transaction in its new block. Upon receiving a newly mined block, all nodes validate the block by performing all the computations again,  and verifying that the new state is indeed as is recorded in the block. A transaction request must be accompanied by some fee, i.e., some amount of Ether, to incentivize miners to perform the computation. Typically, these fees are proportional to the duration of the computation.
+
+To summarize,
+\begin{quote}
+    The Ethereum Virtual Machine is the global virtual computer whose state every participant on the Ethereum network stores and agrees on. Any participant can request the execution of arbitrary code on the EVM; code execution changes the state of the EVM.
+\end{quote}
+
+\section*{Smart Contracts}
+In practice, different participants may want to perform very similar computations at different points in time. It is not practical for them to write new code every time they want to request a computation on the EVM. A better model, which is adopted by EVM, is to allow application developers to upload programs (reusable snippets of code) into the EVM storage, which can then be referred to by a transaction. We call the programs uploaded to and executed by the network \textit{smart contracts}. Typically, a smart contract will have some internal state variables, in addition to holding some piece of code. 
+
+One example of a smart contract could be a token-exchange smart contract; it takes as input a certain amount of Ether and issues out a new token, or vice-versa. In this case, a user would call the smart contract with the amount of Ether it wants to exchange for the token, and possibly the highest exchange-rate it is willing to tolerate. The state would record the current exchange-rate for the token, which would be a function of its past demand/supply. It could also store the maximum amount available of the new token, so that it does not issue a token if it is not available. More generally, a smart contract deals in the transfer of digital assets.
+
+Any developer can create a smart contract and make it public to the network, using the blockchain as its data layer, for a fee paid to the network. Any user can then call the smart contract to execute its code, again for a fee paid to the network. A smart contract can invoke other smart contracts as part of its code. Thus, developers can build arbitrarily complex decentralized apps and services: marketplaces, financial instruments, games, etc.
+
+\section*{Basic terms for EVM}
+Let us now understand some of the building blocks of the EVM in more detail. 
+
+\subsection*{Accounts}
+In Ethereum, there are two types of accounts:
+\begin{itemize}
+    \item \textbf{Externally Owned Accounts.} These accounts are like bank accounts. They hold some amount of currency, and one can pay or receive currency from this account.
+    \item \textbf{Contract Accounts.} In addition to being able to store, send and receive currency, these accounts store some piece of code. Transactions made to this account trigger this code.
+\end{itemize}
+Let us elaborate on accounts some more. Externally Owned Accounts are easy to understand, as they arise naturally in a currency exchange system. If we think of Ethereum as solely a currency system, then we would have only Externally Owned Accounts. Each such account stores two fields:
+\begin{itemize}
+    \item \textbf{Amount:} The total amount of currency stored in this account
+    \item \textbf{Nonce:} This is a count of number of transactions sent by this address.
+\end{itemize}
+The nonce of an account is incremented by one every time a new transaction is created by this account (i.e., every time money is spent from this account). Basically, the nonce prevents transactions from being executed multiple times. The role of a nonce becomes clear once we discuss transactions in the following section.
+
+We now discuss contract accounts. In Ethereum, contract accounts are the means of storing and referencing smart contracts. We have already seen that smart contracts are pieces of code that any user can access, verify, and call via a transaction. In Ethereum, the following design choice was made: each smart contract is stored as a contract account. Such an account stores the contracts code (which is immutable), as well as some data that may be needed to execute the code. For example, if the smart contract issues new tokens in exchange for Ether, the data could store the current exchange rate, and/or the total number of tokens remaining. In essence, the account data contains some state information needed for this particular contract itself. The code itself is written as a list of functions.
+
+Let us now put together externally owned accounts and contract accounts in the same framework, as is indeed done in Ethereum. For each account, the pertinent account information is summarized in the form of an \textit{account state}. Every account state has the following four fields:
+\begin{itemize}
+    \item Nonce: In an externally owned account, this denotes the number of transactions created by this account. In a contract account, it denotes the number of contracts created by this account.
+    \item Balance: The amount of Ether owned by this account, in Wei, a denomination of Ether. There are $10^{18}$ Wei per Ether.
+    \item Storage Root: The data for the smart contract is stored as a Merkle tree. The storage root is simply the root node of the Merkle tree, and is a compact representation of the whole data. In externally owned accounts (and contracts with no storage), this field is empty.
+    \item Code Hash: The hash of the code of the smart contract. The code is written in Solidity, a high-level programming language. It is written as a set of routines (or functions). This part of the account state is immutable. In externally owned contracts, this field is the hash of the empty string.
+\end{itemize}
+
+\begin{figure}
+    \centering
+    \includegraphics[width = \textwidth]{figures/Account State.pdf}
+    \caption{A summary of an account state}
+    \label{fig:account_state}
+\end{figure}
+Figure \ref{fig:account_state} stores the  
+The set of all accounts and account states are collated together in the form of a huge Merkle trie. This set of information is called the \textit{world state}. Every transaction makes a change in the world state. This is what is illustrated in Figure \ref{fig:blockchain_computer}.
+
+\subsection*{Transaction}
+A transaction is a single cryptographically-signed instruction. A transaction is submitted by an external actor and its external owned account (EOA). There are two practical types of transaction, contract creation and message call.
+Transactions follow the atomicity. This means that the transaction cannot be divided or interrupted. Either all parts in transactions are done or nothing would be done. Transactions cannot be overlapped and must be executed sequentially. Transaction order is not guaranteed and the miner can determine the order of the transaction in a block. The order between blockers is determined by a consensus algorithm such as PoW. A submitted transaction includes the following information:
+\begin{itemize}
+  \item recipient: The receiving address (if an externally-owned account, the transaction will transfer value. If a contract account, the transaction will execute the contract code).
+  \item signature: The identifier of the sender. This is generated when the sender's private key signs the transaction and confirms the sender has authorised this transaction. 
+  \item value: The amount of ETH to transfer from sender to recipient (in WEI, a denomination of ETH).
+  \item data: Optional field to include arbitrary data.
+  \item gasLimit: The maximum amount of gas units that can be consumed by the transaction. Units of gas represent computational steps.
+  \item gasPrice: The fee the sender pays per unit of gas.
+\end{itemize}
+Here is an example of a transaction object:
+\begin{lstlisting}
+{
+    from: "0xEA674fdDe714fd979de3EdF0F56AA9716B898ec8",
+    to: "0xac03bb73b6a9e108530aff4df5077c2b3d481e5a",
+    gasLimit: "21000",
+    gasPrice: "200",
+    nonce: "0",
+    value: "10000000000",
+}
+\end{lstlisting}
+
+
+\section*{Order-Execute Structure}
+General structure of the blockchain contains the following three phases:
+\begin{enumerate}
+    \item Order
+    \item Execute
+    \item Update state
+\end{enumerate}
+The Order phase is a consensus protocol for example the longest chain protocol, which we have already discussed in the previous lectures. In this lecture, we will mainly focus on the Execute phase and the Update state phase.
+\subsection*{Update state}
+State is a persistent storage that is on the disc. In the state of a payment system, the account information includes the following fields:
+\begin{itemize}
+  \item Address: Address of an account. This is used for identification.
+  \item Account-nonce: An integer that indicates the number of transactions this account has executed.
+  \item Balance: An integer represents how many tokens this account has.
+\end{itemize}
+In the smart contract system like Ethereum, there are two additional fields that are needed:
+\begin{itemize}
+  \item Code: A sequence of OPCODEs
+  \item Account storage: A key-value pair storage. Key is 256-bit and the value is also 256-bit. 
+\end{itemize}
+
+
+\subsection*{Execute}
+There are two types of codes that could involve in the EVM. First is called EVM OPCODE, which is a low level stack-based language that is similar to the machine code or assembly code. Second is called Solidity, which is a high level code that is similar to C++, Java and other object-oriented programming language. Usually people write contracts in Solidity and the compiler will compile the high level programming language into OPCODE for the machine to execute.
+
+\subsubsection*{OPCODE}
+OPCODE is identified by a byte (8 bits from 0X00 to 0XFF)\footnote{Full OPCODE see https://github.com/crytic/evm-opcodes}. As we mention before, OPCODE is a stack-based language and EVM will keep a first-in-last-out (FILO) stack during the execution. Each item in stack consists of 256 bits and the maximum capacity of the stack is 1024 bits. OPCODE will insert/remove items into/from the stack. This stack is a volatile data structure and the contents will be removed after the execution. Here is a detailed OPCODE instruction figure.
+\begin{center}
+    \includegraphics[width=\textwidth]{figures/OPCODE3.png}
+\end{center}
+From the figure we can find that the OPCODE is divided into 11 parts and each part has different usage. Different starting hexadecimal value of the OPCODE represent different functionalities. For example, all OPCODE starting with 0 (i.e. 00, 01, 02, ..., 0B) are used to perform the arithmetic operations and all OPCODE starting with 1 (i.e. 10, 11, ..., 1D) are used to perform the comparison and bitwise logic operations.
+
+\subsubsection*{Stack and Memory}
+Another important part in EVM is memory which is also a data structure for execution. Memory consists of an array of bytes and is addressed by an unsigned 256 integer. Each item in the memory is only one byte. The OPCODE can read and write the memory. Like the stack in EVM, memory is also a volatile data structure and will be deleted after the execution.
+
+\subsubsection*{Storage}
+Unlike stack and memory, storage is key-value stuctured persistent database that is maintained in a hash accumulator. Keys and values in storage are both 32 bytes long. The OPCODE can read and write the storage. The storage will not be created before the exection and will not be removed after the execution.
+
+\subsection*{Execute OPCODE example}
+\subsubsection*{Stack example}
+Here is a simple example that illustrate how we could use the memory to perform an addition in EVM stack.
+\begin{center}
+    \includegraphics[width=\textwidth]{figures/Memory-lecture20.png}
+\end{center}
+First, the memory is empty and we first use PUSH1 (OPCODE = 0x60) operation to place a one byte item (number 1) onto the stack. Then we do another PUSH1 operation to place another one byte item (numerb 2) on to the stack. At last, we perform an ADD (OPCODE = 0x01) to add those two numbers and get the result 3.
+\subsubsection*{Memory example}
+Here is an example OPCODE sequence.
+\begin{lstlisting}
+PUSH1 0x01
+PUSH1 0x02
+ADD
+PUSH1 0x00
+MSTORE
+PUSH1 0x20
+PUSH1 0x00
+RETURN
+\end{lstlisting}
+In this example, the program will first push two numbers onto the stack and then perform an addition. It then pushes another number 0x00 onto the stack. Now the program will perform a MSTORE (OPCODE = 0x52) operation, which will save the word from stack to the memory starting from address 0x00. At last, the program pushes another two numbers (0x20 and 0x00) to the stack and perform the RETURN (OPCODE = 0xF3) operation which will halt the program and return the value in memory from address 0x00 to address 0x20.
+
+
+\section*{Contract}
+Contract is a special type of account and therefore every contract should have five fields just like normal user account. Here is the way that user can create a contract and execute specific functionality within a contract.
+\subsection*{Creation of a contract}
+We can create a contract by a transaction. To create a contract, we need to provide the initialization OPCODE. Usually, this is done by the compiler and the programmer only need to give the instructions in Solidity. Here is the initialization for a contract:
+\begin{itemize}
+  \item Address: Hash of the information code.
+  \item Account-nonce: Initialize to 0.
+  \item Balance: Initialize to 0.
+  \item Code: OPCODE.
+  \item Account storage: Empty.
+\end{itemize}
+
+\subsection*{Execution a contract}
+After a contract is created, it is public and visible on the blockchain. This means that all users in the Ethereum ecosystem can call and execute the contract if they know the address of the contract. To call the contract, the user needs to provide the following three information in the transaction:
+\begin{itemize}
+  \item Contract address.
+  \item Call data.
+  \item Gas fee.
+\end{itemize}
+Call data is the hash of the function name that the user wants to call. Since one smart contract may contain more than one functions, user needs to provide the hash value of the specific function he wants to execute.
+
+\subsection*{Example of a smart contract}
+\subsubsection*{Create a smart contract}
+Here is an example of a simple smart contract. In this contract named \texttt{Nothing}, there is a function that actually does nothing. To create this smart contract, we need to first write out the Solidity code.
+\begin{lstlisting}
+pragma solidity ^0.6.3;
+contract Nothing {
+    function nothing() public {
+    }
+}
+\end{lstlisting}
+The Solidity compiler will then compile the Solidity code and it will give the OPCODE as following.
+\begin{center}
+    \includegraphics[width=6cm]{figures/OPCODE.png}
+    \hspace{1cm}
+    \includegraphics[width=6cm]{figures/OPCODE2.png}
+\end{center}
+Notice that the OPCODE on the left is the same as the code on the right. However, the OPCODE on the left is the raw code translated from the compiler and the gray part of the code on the right is the function that we have in the contract. Everything before the gray part is the instruction code that tells the system to store the code into the contract.
+\subsubsection*{Execute a smart contract}
+To execute a smart contract, we need to know the address of the smart contract that we want to execute. After knowing the address, we also need to know the hash value of the specific function name and this is the call data. In the \texttt{Nothing} smart contract example, the call data = \texttt{0x448f30a3}. In the OPCODE, the contract will check the call data by command \texttt{CALLDATALOAD … PUSH4 0x448f30a3 EQ}. In this command, CALLDATALOAD (OPCODE = 0x35) will get input data of the current environment and check if the call data matches the sequence \texttt{0x448f30a3} using the EQ (OPCODE = 0x14) operation. If everything matches, the smart contract can execute the OPCODE of the function \texttt{nothing}.
+
+\section*{Gas}
+Gas is designed to prevent someone writing or running into an infinite loop by mistake. It is a generalization of transaction fee. Every execution of OPCODE will produce some amount of gas. There are three concepts related to gas in EVM:
+\begin{itemize}
+  \item Gas Capacity: This is the maximum gas this transaction could use.
+  \item Gas Usage: This is the gas that is incurred when OPCODEs and other operations execute. Gas usage has the following three properties:
+  \begin{itemize}
+  \item Memory fee increases quadratically with usage.
+  \item Storage fee is much heavier than memory fee.
+  \item Base fee that every transaction pays.
+  \end{itemize}
+  If the gas usage exceeds the gas capacity, the execution aborts and nothing will be processed.
+  \item Gas Price: This is the price for the gas. This is set by the caller of the contract or the sender of the payment. The actual fee equals to the product of the gas usage and the gas price.
+\end{itemize}
+As the device evolves, the gas fee rules are not a perfect measurement for the cost of running the contracts and the gas fee has changed many times in the history.
+
+\section*{Payment}
+There are two types of accounts in the EVM. One is user and the other is contract.
+\begin{center}
+\begin{tabular}{| c | c | c |}
+\hline
+  & User & Contract \\ 
+  \hline
+ Address & Hash of the public key & Hash of creator’s address and code \\ 
+ \hline
+ Account-nonce & Number of executed transactions & 0 all the time   \\
+ \hline
+ Balance & User account balance & 0 all the time   \\
+ \hline
+ Code & Empty all the time & OPCODE   \\
+ \hline
+ Account storage & Empty all the time & READ/WRITE from code   \\
+ \hline
+\end{tabular}
+\end{center}
+There are two types of transactions that could happen in EVM. One is the pay to the user and the second is the call of a contract.
+\begin{center}
+\begin{tabular}{| c | c | c |}
+\hline
+  & Pay to User & Call a Contract \\ 
+  \hline
+ Receiver & User & Contract \\ 
+ \hline
+ Value & Transaction value & 0    \\
+ \hline
+ Gas Capacity & Set by sender & Set by sender   \\
+ \hline
+ Gas Price & Set by sender & Set by sender   \\
+ \hline
+ Call Data & Empty & Set by sender   \\
+ \hline
+\end{tabular}
+\end{center}
+
+\end{document}

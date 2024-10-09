@@ -1,0 +1,279 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{subcaption}
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 4}
+\cfoot{\thepage}
+
+\title{Lecture 4:  Peer to Peer Network and Bitcoin system}
+\author{Principles of Blockchains, Princeton University,  \\ Professor:  Pramod Viswanath \\ Scribes: Soubhik Deb, Ranvir Rana, \\Suryanarayana Sankagiri and Xuechao Wang}
+%\date{February 4, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In this lecture, we cover the networking and system aspects of Bitcoin. We first introduce the notion of peer-to-peer networks, of which a blockchain is an example. We describe how messages are broadcast to all users in such a network. We specify the details of the networking layer in Bitcoin and also discuss two interesting ways of improving the networking layer protocols. The first, called \textsf{Perigee}, is a technique to reduce the delay in propagating messages. The second, called \textsf{Dandelion}, reduces the extent to which an eavesdropper can track messages to its source. In the second part of this lecture, we cover some aspects regarding transactions in Bitcoin. Transactions give semantic meaning to the decentralized ledger enabled by a blockchain. We discuss how Bitcoin gets its monetary value and how money is transferred from one user to another. We highlight the different safety checks that users can perform to prevent any form of cheating. This leads to the notion of validating a block. We argue that validating blocks is a storage and computation intensive process. and show how Bitcoin can support light clients that perform a limited extent of validation. Finally, we take a high-level view and discuss how a blockchain can act as a distributed computer, running arbitrary programs termed as smart contracts.
+\end{abstract}
+
+\section*{Basic primitives and random network construction}
+In blockchain systems, the basic network-layer operation is to {\em broadcast} messages. By broadcast, we mean that a user sends some information/message to all other users in the system. There are two basic blockchain elements being broadcast:
+\begin{itemize}
+    \item data values that are to be recorded on the ledger
+    \item blocks
+\end{itemize}
+
+In a decentralized system such as a blockchain, the network should have
+\begin{itemize}
+    \item Robustness from a single point of failure: No centralized server;  
+    \item Robustness from censorship: No centralized server; 
+    \item Robustness from nodes going offline, high churn rate; 
+\end{itemize}
+Additional desirable properties include
+\begin{itemize}
+    \item a message that is broadcast should reach all users as quickly as possible
+    \item a message that is broadcast should not be traceable back to its origin (for the sake of anonymity/privacy)
+\end{itemize}
+The need for robustness implies that we do not want a client-server relationship; we settle for a peer-to-peer (P2P) network where each node has identical behavior.
+%A distributed system's security is closely tied to its network assumption; hence it is essential to design the network to mirror these assumptions. We understand p2p networking using the Bitcoin network as a reference.Examples of a P2P network include Napster and  BitTorrent. 
+
+Consider a set of users in a P2P network. An \textit{overlay network} depicts the connections between nodes, and is represented as a graph. It abstracts out the physical network switches and routers and defines virtual links between nodes. Two nodes that are connected by a link can exchange messages directly. Those that are not connected by a link must find a path connecting them on this overlay network in order to communicate messages.
+
+Overlay networks can be split into two base categories: structured and unstructured. Structured overlay networks, like \href{https://en.wikipedia.org/wiki/Chord_(peer-to-peer)}{CHORD}, assign an identifier to each node and uses that to construct well-defined routing rules. These networks are excellent for routing sending point to point messages, a use case not required for Bitcoin. Structured networks are suitable for broadcast, too; any message transmission takes $O(\log N)$ hops on CHORD with $O(\log N)$ connections per node.
+
+On the other hand, unstructured networks like $d$-regular graphs have no node identifiers; a node connects to $d$ other nodes randomly. While routing point to point messages takes $O(\log N)$ hops, it's impractical since finding the path from point A to point B involves many peer queries. On the other hand, broadcast is very efficient using gossip and takes $O(\log N)$ hops. Thus, the number of hops required is the same as the structured network with the added benefit of $O(1)$ peer connections. Hence, the Bitcoin network uses an unstructured $d$-regular overlay network. 
+
+How does broadcast take only $O(\log N)$ steps? We first need to understand the gossip-flooding-based broadcast protocol. The flooding protocol mimics the spread of an epidemic. Once a node is ``infected", it infects its peers and forever stay's infected. It is easy to see that the spread of information will happen exponentially; hence the information will take $O(\log N)$ hops to spread to all nodes. To formally understand the spread, we note that $d$-regular graphs with $d\geq 3$ are an \textit{expander graph} for large sizes ($|V|$) with high probability. An expander graph is a connected but sparse graph ($|E|=O(|V|)$) with the following property: $|\partial A| \geq \epsilon|A|$ for any connected sub-graph $A$ with $|A|<0.5|V|$. Here, $|\partial A|$ refers to the number of vertices outside $A$ with at least one neighbor in $A$. A gossip message originates with $A(0)$ as the broadcasting node with $|A(0)|=1$, in the next hop, it will spread to $\partial A(0)$ with $|A(1)|\geq (1+\epsilon)|A(0)|$. This recursion continues and we have $|A(k)|\geq(1+\epsilon)^kA(0)$. Thus, the number of steps to reach half the number of nodes is logarithmic in the number of nodes. It can be shown that the other half of the nodes can also be covered in $O(\log N)$ time.
+
+
+%Engineering issues (peer discovery, bootstrap, churn). Implementation connections (to the lab experiment). Validation of tx, blocks. How does that impact networking? What about skipping validation and doing cut-through routing? Compact blocks. (RR)
+
+\section*{Bitcoin P2P network: A systems view}
+In Bitcoin, peers connect to each other and communicate using the TCP protocol. The codebase allows for eight outgoing connections and up to 117 incoming connections. The network has a high churn rate (rate at which users enter/leave the system); hence, the node must be ready to connect to new peers. Moreover, to ensure that the peers we are connecting to are chosen randomly, the node keeps a large list of nodes running Bitcoin in the form of their (IP, port) tuple and establishes a connection to one of them randomly when a slot opens up.  
+
+How does a node bootstrap its list of peers? This happens by connecting to a set of DNS seed nodes. The seed nodes are not heavily decentralized; hence completely relying on the peer list provided by them is not advisable. On connecting to the initial set of peers, a node asks its neighbors for their peer list using {\tt getAddr} and {\tt Addr} messages. The node keeps refreshing its peer list regularly by exchanging peer lists with its peers. 
+
+Transmission of all block and transactions happen through the inventory message {\tt inv}, on receiving an {\tt inv} message the node checks if it has the block or the transaction in its local storage. If not, it sends the {\tt getData} message to fetch those blocks and transactions from the peer. Since block sizes are relatively large, block transmission can optionally happen in 2 stages. On receiving the {\tt inv} message, the node may ask for headers first using {\tt getHeaders} and ask for complete blocks only if a header chain is established. This header-first block transmission increases queries but can decrease the net bandwidth usage. It may also prevent nodes from accepting PoW invalid blocks since the node can check from the header whether PoW is valid. 
+
+We saw in the previous lecture that some nodes might be malicious. A question that may arise is: what stops malicious nodes from flooding the network with invalid blocks and transactions (i.e., with invalid PoW and/or signatures)? Such flooding will saturate the network and increase transmission delay to unacceptable levels. Such an attack is prevented by a simple design decision, forward message to peers only after validating the message; i.e., a node sends an {\tt inv} block message to its peers only after validating the block. If the adversary creates an invalid block, the block will not be propagated beyond one honest node. Additionally, nodes maintain their peers' reputation using some predefined heuristics; if a peer misbehaves (say by sending a transaction with invalid signatures), its reputation is downgraded and after a certain lower threshold is disconnected.  
+
+As a side effect, forward after validation structure increases the net delay in broadcasting a block across the network. Several ``trusted" relay networks have been established for speeding up propagation. Once a block is validated by a peripheral node in a relay network, it is gossiped to all other nodes before performing local validation since the inter-node communication is trusted. An example is FRN (fast relay network); it creates a hub and spoke model with trusted servers as hubs. 
+
+Another proposal to speed up propagation is using compact blocks. Note that a transaction is broadcast in the network twice. Once when the transaction is generated and the second time as a transaction is a block. We can remove this redundancy by introducing compact blocks. For nodes enrolled for compact block relaying, their peers guess the transaction the node has received while forwarding a new block and only send a compact block containing the original block contents sans the guessed transactions. Any mismatch in guessing is resolved later using a {\tt getblktxn} message. 
+
+\section*{Random Geometric Graphs}
+In the random network topology, each node in the peer-to-peer (P$2$P) network $G$ chooses $c$ other nodes uniformly at random from the set of all nodes in the network $G$ and sets them as its neighbors. Thus, whenever a node $n$ needs to broadcast a message, it transmits the message to these $c$ neighbors who in turn relays the message to their own neighbors. While the result graph is a expander with low diameter, the shortest path taken for routing a message from the source to the destination is sub-optimal in the sense that the length of this shortest path could be much worse than the {\em geodesic} shortest path (see Fig~\ref{fig:random-topology}). Furthermore, the random network topology fails to take into account the heterogeneities present in the internet: different users could have different bandwidth and processing power, non-uniformity in mining power that make a difference to networking efficiency. 
+
+{\sf Perigee} is a recent P2P protocol that aims to create a random {\em geometric} graph topology; this way the shortest path on the connectivity graph is also the shortest {\em geographic} (geodesic)  path. There are two types of neighbors for a node $n$: (a) \textit{outgoing neighbors}: the set of neighbors to whom the node $n$ sends and receives messages; (b) \textit{incoming neighbors}: the set of neighbors from whom message is only received. {\sf Perigee} is a decentralized algorithm  for selecting the set of outgoing neighbors with the objective to minimize the time it requires for a broadcast message to reach $90\%$ of the nodes in the network. The overarching idea of {\sf Perigee} is to update the set of outgoing neighbors by exploiting the information gathered by interacting with the current set of outgoing neighbors while exploring new connections in the network; this is done by making a connection to the classical \href{https://epubs.siam.org/doi/abs/10.1137/S0097539701398375}{multi-armed  bandit problem} in statistical decision making theory.
+
+In {\sf Perigee}, a node $n$ in proceeds in a round-by-round basis under the following steps:
+\begin{enumerate}
+    \item A round comprises of $M$ unique messages that has been broadcast in the network. Let these $M$ messages in round $r$ be represented by $\mathcal{M}^r$ and $\Gamma^r$ represent the set of outgoing neighbors in round $r$. For each message $m \in \mathcal{M}^r$, the node $n$ records the timestamp $t^m_{\text{nbr}}$ when that message $m$ was received from each of its outgoing neighbor $\text{nbr} \in \Gamma^r$. The node $n$ also records the earliest timestamp $t^m_{\text{earliest}}$ when it received the message $m$. Note that it is possible that the node $n$ received the message $m$ for the first time from a non-outgoing neighbor.
+    \item At the end of the round, the node $n$ assigns score to each of its outgoing neighbors based on the timestamps it recorded in step $1$. Towards that end, the node $n$ first determines $t^m_{\text{nbr}} - t^m_{\text{earliest}}$ for each outgoing neighbor $\text{nbr} \in \Gamma^r$ and message $m \in \mathcal{M}^r$. Now, the node $n$ employs a scoring method to assign scores to each outgoing neighbors. There are two flavors of scoring methods. 
+    \begin{itemize}
+        \item \textit{Scoring each outgoing neighbor individually.} For each outgoing neighbor $\text{nbr} \in \Gamma^r$, the score is computed as $90\textsuperscript{th}$ percentile of the set $\{t^m_{\text{nbr}} - t^m_{\text{earliest}} \vert m \in \mathcal{M}^r\}$. This scoring approach  reflects a preference to retain an outgoing neighbor from which messages are received relatively earlier. Thus, lower the score for a neighbor $\text{nbr}$, higher is the preference to retain that neighbor in the next round. Therefore, assuming  $k$ out of $\mid \Gamma^r \mid$ outgoing neighbors are to be retained for the next round, the node $n$ retains the outgoing neighbors that are among the $k$ lowest scorers.
+        \item \textit{Scoring groups of neighbors jointly.} In contrast to previous approach, the idea behind joint scoring is to assign the score to a group of neighbors $\Gamma_{\text{retain}}$. First, set $\Gamma_{\text{retain}} = \phi$ and determine the outgoing neighbor $\text{nbr} \in \Gamma^r$ that has the lowest $90\textsuperscript{th}$ percentile of the set $\{t^m_{\text{nbr}} - t^m_{\text{earliest}} \vert m \in \mathcal{M}^r\}$ and include it in $\Gamma_{\text{retain}}$. Then, score each $\text{nbr} \in \Gamma^r \setminus \Gamma_{\text{retain}}$ by computing the $90\textsuperscript{th}$ percentile of the set \[\{ \min(t^{m}_{\text{nbr}} - t^{m}_{\text{earliest}}, \min(\{t^{m}_{\text{nbr}'} - t^{m}_{\text{earliest}} \mid \text{nbr}' \in \Gamma_{\text{retain}}\})) \mid m \in \mathcal{M}^r\}.\] Include the $\text{nbr} \in \Gamma^r \setminus \Gamma_{\text{retain}}$ with the lowest score in $\Gamma_{\text{retain}}$. Essentially, we are determining the outgoing neighbor in  $\Gamma^r \setminus \Gamma_{\text{retain}}$ that best complements the existing neighbors in $\Gamma_{\text{retain}}$ to minimize the time required for the node $n$ to receive $90\%$ of the messages. Assuming  $k$ out of $\mid \Gamma^r \mid$ outgoing neighbors are to be retained for the next round, this process is continued until $\mid \Gamma_{\text{retain}} \mid = k$.
+    \end{itemize}
+    This step describes the process for retaining $k$ outgoing neighbors from $\Gamma^r$ by \textbf{exploiting} the information gathered from interacting with neighbors in round $r$. The retained outgoing neighbors are included into $\Gamma_{r+1}$.
+    \item  Next, the node $n$ does \textbf{exploration} by selecting uniformly at random $\mid \Gamma^r \mid - k$ nodes from the set of all nodes in the network that are not in $\Gamma^r$ and are included in $\Gamma^{r+1}$. 
+\end{enumerate}
+\begin{figure}[ht]
+\centering
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=.75\linewidth]{figures/random_topology.pdf}
+  \caption{Random network topology}
+  \label{fig:random-topology}
+\end{subfigure}%
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=.75\linewidth]{figures/perigee.pdf}
+  \caption{Perigee}
+  \label{fig:perigee}
+\end{subfigure}
+\caption{Observe that, for Perigee, shortest path follows much closer to the geodesic shortest path.}
+\end{figure}
+
+
+
+\section*{Network Anonymity and Privacy}
+In a blockchain system, the blockchain data structure is visible to all participants. In the context of a cryptocurrency, the blockchain contains every transaction in the history of the currency. More generally, it can contain sensitive data of users, which should not be made public. Indeed, this is a necessary feature of blockchains if it is to be publicly verifiable ledger. How then can one obtain privacy in blockchains?
+
+For the sake of privacy, Bitcoin originally proposed using pseudonymous identifiers. Each user participates in the system via one or more psuedonym, each of which is linked to a public key. This paradigm has been adopted by most cryptocurrencies today. Anybody observing the blockchain learns only the transaction patterns of each pseudonym. As long as these pseudonyms cannot be linked to the owner's human identity, privacy is preserved. However, multiple studies have shown that such a system is vulnerable to de-anonymization attacks, particularly in the presence of side information. % \cite{narayanan2009anonymizing,backstrom2007wherefore,fistful,androulaki2013evaluating,ober2013structure}.
+
+Here, we focus on a specific class of de-anonymization attacks wherein an adversary who observe traffic flowing over the P2P network can obtain some information about the users. In most cryptocurrencies, new transactions are spread over the network according to some pre-specified flooding protocol (typically a gossip algorithm). If an adversary observes this traffic at a fine enough time resolution -- e.g., by setting up a supernode that connects to many nodes -- it can often link transactions (and hence the pseudonym of the sender) to the IP address that originated the transaction. The IP address can then be associated to a human identity by other means. We then discuss an alternate networking protocol called \textbf{Dandelion} which provides theoretical privacy guarantees.
+
+\subsection*{A mathematical model}
+We first discuss a mathematical model for the network de-anonymization problem. The model involves the protocol by which messages are spread in the network, and a model of the adversary that collects information about this process and tries to identify the source of the message. Typically, the underlying network is modeled as a graph $G = (V,E)$. Here, $V$ denotes the set of all nodes participating in the blockchain system and $E$ is the set of edges representing TCP connections between nodes. As a simplification, we consider the problem of de-anonymizing a single message (transaction/block) sent by a particular node $v^* \in V$. When modeled as above, the problem of de-anonymization boils down to guessing $v^*$ given some observations of how the message has spread. 
+
+%Although messages sent in the network include both transactions, for this portion we will be concerned only with transactions. This is because we want to link the The source of the transactions
+
+In the context of de-anonymization, there are two main adversarial models: \emph{eavesdropper adversaries} and \emph{botnet (spy-based) adversaries}. Eavesdropper adversaries run a supernode that connects to all (or a substantial subset) of nodes in the network (Figure \ref{fig:eavesdropper}).
+ From the perspective of an honest node, the eavesdropper looks just like any other node. Honest nodes therefore relay transactions normally, allowing the eavesdropper to collect timestamps and other metadata. Combined with information about the graph topology, this metadata can be used to infer the source of a particular transaction. One important property of eavesdropper nodes is that they typically do not relay messages; they only collect communications relayed by other nodes. 
+
+Botnet or spy-based adversaries (Figure \ref{fig:botnet}) 
+ instead consist of a set of corrupt, colluding nodes that participate in the network normally, both accepting \emph{and} relaying information. We let $p$ denote the fraction of spies in the network, and let $V_A, V_H \subseteq V$ denote the set of adversarial and honest nodes, respectively. As the name suggests, this adversarial model is motivated by a botnet that spawns cryptocurrency nodes. The key difference compared to the eavesdropper adversary is that each botnet node may have limited visibility into the network (e.g., if it only connects to a few peers rather than the entire network), and botnet adversaries may inject packets into the network. 
+
+\begin{figure}
+\begin{minipage}{0.5\textwidth}
+\centering
+    \includegraphics[width=1.2in]{figures/eavesdropper}
+    \caption{Eavesdropper adversary. A well-connected supernode eavesdrops on relayed communications.}
+    \label{fig:eavesdropper}
+\end{minipage}
+\hspace{0.1in}
+\begin{minipage}{0.5\textwidth}
+    \centering
+    \includegraphics[width=1.2in]{figures/botnet}
+    \caption{Botnet adversary. Red nodes represent  corrupt ``spy nodes", which use observed metadata to infer the transaction source.}
+    \label{fig:botnet}
+\end{minipage}
+\end{figure}
+
+As discussed in the sections above, many cryptocurrencies---including Bitcoin---broadcast content using a gossip protocol called \emph{diffusion}. Under diffusion, each node transmits the message to each of its neighbors with independent, exponentially-distributed delays. The problem of detecting the source of a diffusion process over a graph is well-studied. An \href{https://ieeexplore.ieee.org/abstract/document/5961801}{early work}  who studied this problem in a so-called \emph{snapshot model}. Under this model, the diffusion process is allowed to spread in the network until some time $T$. At this time, the adversary gets to observe which nodes have the message, and which do not. The authors showed that one can reliably infer the source of a diffusion process, even as $T$ grows to infinity.
+
+The de-anonymization algorithms suggested in this and other works revolve around the notion of \textit{centrality} or symmetry; because diffusion spreads content symmetrically on the underlying network, the message (roughly) spreads in a disc over the graph, with the true source at the middle of that disc. The above results imply that an adversary with partial global oversight can infer the shape of the disc and identify the central node with non-negligible probability. These results suggest that diffusion is poorly-suited to protecting users' anonymity at the network level, which motivates the need for alternative spreading protocols that protect users' anonymity.
+
+\subsection*{Dandelion}
+The key idea that emerges from the analysis of diffusion is that one must break the symmetry of the message spreading (aka gossiping) protocol in order to prevent the adversary from accurately guessing the message.  The {\sf Dandelion} P2P networking protocol, which incorporates this idea, has two phases: a \textit{stem phase} (aka anonymity phase) and a \textit{fluff plase} (aka diffusion phase). In the stem phase, each node propagates each message along a randomly chosen direction. After a random number of hops, the stem phase ends. Then, in the fluff phase, the transaction is broadcast via diffusion to the rest of the graph. As mentioned, the stem phase provides the anonymity guarantees, while the latter fluff phase helps propagate the message to all users without much delay.
+
+
+The {\sf Dandelion} protocol is explained in more detail below. {\sf Dandelion} proceeds in asynchronous epochs; each node advances its epoch when its internal clock reaches a random threshold (in practice, this will be on the order of minutes). Within an epoch, the main algorithmic components of {\sf Dandelion} are:
+\begin{enumerate}
+    \item \textbf{Anonymity graph:} The random walk takes place on an overlay of the P2P graph called the anonymity graph. This overlay should be chosen either as a random cycle graph (i.e., a 2-regular graph) or a 4-regular graph. This 4-regular graph is embedded in the underlying P2P graph by having each node choose (up to) two of its outbound edges, without replacement, uniformly at random as {\sf Dandelion} relays. This does not produce an exact 4-regular graph, but an approximation.Each time a node transitions to the next epoch, it selects fresh {\sf Dandelion} relays.
+    \item \textbf{Forwarding of a node’s own transactions:} Each time a node generates a transaction, it forwards the transaction in stem phase along the same randomly-selected outbound edge on the anonymity graph. If the anonymity graph is a cycle, there is only one outbound edge per node; otherwise, the node must choose one of its two outbound edges.
+    \item \textbf{Relaying of other nodes’ transactions} Each time a node receives a stem-phase transaction from another node, it either relays the transaction or diffuses it. The choice to diffuse transactions is pseudo-random, and is computed from a hash of the node’s own identity and epoch number. Note that the decision to diffuse does not depend on the transaction itself—in each epoch, a node is either a diffuser or a relay node for all relayed transactions. If the node is not a diffuser in this epoch (i.e.,it is a relayer), then it relays transactions pseudo-randomly; each node maps each of its incoming edges in the anonymity graph to an outbound edge in the anonymity graph (with replacement). This mapping is selected at the beginning of each epoch, and determines how transactions are relayed.
+    \item \textbf{Robustness mechanism} Each node tracks, for each stem-phase transaction that it sends or relays,whether the transaction is seen again as a fluff-phase transaction within some random amount of time. If not, the node starts to diffuse the transaction
+\end{enumerate}
+
+% \subsection*{Guarantees on Dandelion}
+% The key theoretical result concerning {\sf Dandelion} provides upper bounds on both the \textit{precision} and the \textit{recall} with which an adversary can estimate the source of a message. \textit{define precision, recall.}
+
+
+\section*{Basic requirements for a banking system} 
+In any currency/banking system, there are some basic requirements that the system must provide for. We list them here:
+\begin{enumerate}
+    \item There should be a unit of currency/money.
+    \item There should be a standard way of keeping accounts, i.e., keeping track of how much money each person owns, and transferring money between accounts. 
+    \item No user should be able to create new money from thin air. Put differently, there should be a fixed amount of money in the system at any given time, and new money should be introduced in a systematic manner.
+    \item A user should not be able to spend more money than he/she owns. There should be a way to verify whether or not this happens.
+    \item One user should not be able to spend someone else's money (at least, not without their permission).
+\end{enumerate}
+Let us see how the Bitcoin system provides these features.
+
+\section*{Bitcoin and Satoshi}
+The basic unit of currency in the Bitcoin system is, simply, Bitcoin. The smallest denomination of a Bitcoin is called a Satoshi. It is equal to $10^{-8}$ Bitcoins. All transactions must be some integer multiple of a Satoshi. Just as all other currencies in the world have exchange rates, there is an exchange-rate between Bitcoin and the dollar. As of today, February 9 2021, one Bitcoin is worth $48,000$ US dollars. Due to various factors (including greed and speculation), the exchange rate between Bitcoin and dollars is very volatile. Whether Bitcoin should be thought of as a currency (like the US Dollar) or a store of value (like the precious metal, gold) has been debated widely; the mainstream view is that Bitcoin is a combination of both. Economically valuing Bitcoin, both in the short and long terms, is an active area of research. In this lecture we will see aspects of the Bitcoin system that helps understand the economic aspects of Bitcoin, both as a currency and a store of value. 
+
+\section*{Transactions}
+In ordinary parlance, the term \textbf{transaction} refers to an exchange of something of value. In the context of Bitcoin and cryptocurrencies, a transaction is simply a message that specifies the transfer of money from one entity to another. In fact, transactions are the data-values that get recorded on the blockchain. The blockchain as a ledger is therefore an ordered list of transactions. From this publicly verifiable ledger, any user can detect whether transactions are made according to certain rules or not, thereby lending credibility to the ledger and the currency.
+
+In Bitcoins, transactions have a well-defined structure, which we elaborate upon below. One can take a look at the structure of real Bitcoin transactions \href{https://www.blockchain.com/explorer}{here}.
+
+\paragraph{Addresses}
+Naively, in a currency system, there should be some notion of an account; a transaction notes the transfer of money from one account to another. In Bitcoin, the notion of accounts is replaced with that of \textit{addresses}. Bitcoins are allocated to addresses, and these addresses are also used to decide where Bitcoins will be sent to, in a transaction. What exactly is an address and how is one generated? In Bitcoin, an address is simply the hash of a public key. Recall the notion of digital signatures, and that of public and private keys. New pairs of keys, and thus new addresses can be generated at will by a single user.
+
+One idiosyncrasy of Bitcoin is the following. In order to receive coins, a user needs to only publish its address, not its public key. However, to spend coins, a user must also reveal its public key. This is explained below.
+
+\paragraph{Transaction inputs and outputs}
+A transaction in a Bitcoin is a statement that records a transfer of money from one address to another. More broadly, a transaction records a transfer of money from one set of addresses to another. Every transaction has a set of \textit{transaction inputs} and \textit{transaction outputs}. Each transaction input states the amount of Bitcoin being spent by a particular address. Each transaction output states the amount of Bitcoin being received by a particular address. In a transaction, the total money being spent should add up to the total money being received. %We shall see the reason for allowing multiple transaction inputs and outputs shortly.
+
+\paragraph{Signatures on transactions}
+Each transaction must be signed by all the users that are spending money. This is a basic safety feature that prevents others from spending one's money without authorization. As mentioned above, each address has a one-to-one correspondence with a public key, which in turn has a one-to-one correspondence with a private key. A user that wishes to spend Bitcoins associated with a particular address creates a transaction appropriately, and then signs the transaction using the corresponding private key. It then broadcasts the transaction along with the corresponding public key. Anyone who that sees a signed transaction can verify whether it was signed by the person owning the address (and thereby, the coins in the address). Thus, signatures help other users validate transactions. More generally, if a transaction spends Bitcoins from multiple addresses, there must be signatures corresponding to each of these addresses.
+
+\paragraph{UTXOs} So far, we have seen how transactions are used to transfer money from one address to another. What prevents a user (i.e., an address) from spending more money than it has? One method would be to keeping track of the balance of each address, adding or deducting its value as money is received/spent from the address. Bitcoin adopts a different approach; here, every transaction input must be a transaction output of an earlier transaction. Linking transaction inputs to past inputs provides a proof that the address indeed has sufficient money to spend. 
+
+When a new transaction output is created, we say that it is \textit{unspent}. At some time in the future, it gets consumed as part of transaction input, at which point it is \textit{spent}. A valid transaction must only include \textit{unspent transaction outputs} (UTXOs) as its inputs. While honest users will always ensure this, a dishonest user can try to \textit{double-spend} its money. In order to prevent this, honest users must keep track of the set of UTXOs at all times, and must validate every new transaction in the blockchain against this set. We elaborate more on this in later sections. The above method of validating transactions is called the \textbf{UTXO model}. A more natural technique would be the \textbf{account-based model}, where the balance is maintained for each address. This latter model is adopted in other cryptocurrencies such as Ethereum (and also in regular banks).
+
+We now see why a Bitcoin transaction allows for multiple transaction inputs and outputs. First, let us consider the need for multiple outputs. Suppose a particular user owns a single Bitcoin address, to which it has received 2 Bitcoins in a particular transaction. Even if it wants to spend a fraction of that money (say, 1 Bitcoin), it must spend the only UTXO it has, which is of 2 Bitcoins. In such a case, it creates two transaction outputs, one to the address it actually wants to send the money to, and the other to itself (the change). The latter output could be to the original address, or to a new address. Next, let us consider the case of multiple inputs. Suppose an address (i.e., user) has received 1 Bitcoin each in two different transactions, and it would now like to pay 2 Bitcoins to another address. It can then include two transaction inputs in a single transaction in order to pay this amount.
+
+\paragraph{Cryptocurrency wallets} In reality, keeping track of UTXOs, and measuring them up for each transaction is difficult. In addition, a single user ought to spawn new addresses regularly, for the sake of maintaining anonymity. These addresses (and the corresponding keys) must be generated carefully, without revealing even a hint of the private key. Further, they must be stored securely. All these functionalities are taken care of by a \textit{cryptocurrency wallet}. Wallets are simply software that perform a lot of these tasks in the back-end, allowing users to transact in Bitcoin as one would using a bank account. Using a wallet requires trusting the software of the wallet. In principle, one can participate in the cryptocurrency system without the use of a wallet, but most users use a wallet.
+
+\paragraph{Transaction fees} We mentioned above that the total value in a transaction's inputs must add up to the total value in its outputs. In reality, the sum of values in the output is slightly lower than the inputs. The remaining amount, called the \textbf{transaction fees}, is claimed by the miner of the block that includes this transaction. The transaction fees are an incentive for a miner to include a particular transaction in the block being mined. Transactions with higher fees get included faster in the blockchain, while those with lower fees get added later. The fees vary with time, and are often calculated automatically by wallets according to a  particular fee rate, measured in Satoshi per kilobyte. You can learn more about transaction fees and fee rates  \href{https://en.bitcoin.it/wiki/Miner_fees}{here}. Roughly speaking, fees are of the order of ten dollars per transaction.
+
+\paragraph*{Coinbase transactions}
+The preceding discussion is on how money is exchanged by users in the Bitcoin system. How is money introduced in the system in the first place? The answer is simple: new Bitcoins are generated with every new block. Every block includes a special transaction, called the coin-base transaction, in which the miner gets for itself a fixed number of Bitcoins. Initially, the rewards were $50$ BTC per block. Every $210,000$ blocks mined, or about every four years, the reward given to Bitcoin miners for processing transactions is cut in half. So far, there have been three halvings, and the current reward is $6.25$ BTC per block. Block rewards will continue till the year $2140$, after which there will be no new Bitcoin introduced in the system. The total volume of currency that will be ever be used is capped at $21$ million, of which around $18.5$ million coins are already in circulation. Coinbase transactions, along with transaction fees, are an additional incentive mechanism for Bitcoin users to actively participate by mining. In the initial years of Bitcoin, coinbase transactions formed the major component of the rewards; with time, the contribution of transaction fees is catching up. 
+
+Figure \ref{fig:bitcoin_halving} shows how the Bitcoin block reward decreases by half every four years. We are currently at 6.25 Bitcoins per block. The figure also shows the total number of Bitcoins in circulations. The halving scheme ensures that the total number of Bitcoins ever produced will taper off to a total of $21$ million Bitcoins.
+
+Figure \ref{fig:block_rewards} shows the same metric as in Figure \ref{fig:bitcoin_halving}, but the reward is now measured in dollars instead of Bitcoin. This figure is useful to understand the incentives for mining. The block rewards (along with the transaction rewards) must offset the cost of mining. As more users join the system with time, a particular miner must compute more hashes (and thus must spend more on electricity) to mine a block. Block rewards (in terms of dollars) have gone up too, providing an incentive for users to mine in spite of the increasing difficulty. There is a subtle balance between the various economic factors that govern the level of mining power in the Bitcoin system.
+\begin{figure}[p]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/bitcoin_halving.png}
+    \caption{Bitcoin block reward in bitcoins. Figure sourced from \href{https://www.coindesk.com/bitcoin-halving-explainer}{here}}
+    \label{fig:bitcoin_halving}
+\end{figure}
+
+\begin{figure}[p]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/block_reward.jpg}
+    \caption{Bitcoin block reward in dollars. Figure sourced from \href{https://www.cmcmarkets.com/en/learn-cryptocurrencies/bitcoin-halving}{here}}
+    \label{fig:block_rewards}
+\end{figure}
+
+%\pramod{please put a figure of how bitcoin's block reward scheme changes over time. give some numbers as examples.}
+
+\paragraph*{Transaction mempool}
+Whenever one user wants to pay another using Bitcoin, it generates an appropriate transaction, signs it, and broadcasts it through the entire network. Ultimately, the transaction is simply a message (a string of bits) in a particular semantic form. The size of a message is  a few kilobytes; the exact size depends on the number of transaction inputs and outputs. The transaction is propagated across the Bitcoin network using the diffusion protocol. Miners keep looking out for new transactions and add them to their memory, called the \textbf{mempool} (they do so after verifying the signature on the transaction). At any given point in time, a miner is working on a particular block, which contains some transactions from its mempool. A miner can include new transactions from its mempool into its working block at will (or even remove them). As such, it would like to include as many transactions as possible in order to maximize its sum total transaction rewards. However, there is an upper bound on the total size of a block. Thus, a miner prioritizes blocks with a higher transaction fee rate, i.e., a higher fee with a smaller size. A transaction with a high enough transaction fee is included immediately by all miners into their working block. The lucky miner who finds the proof-of-work first gets to ``claim" the reward; again the claim on the reward is only honored when the block is confirmed, i.e., buried deep enough in the longest chain. 
+
+Note that there is a certain latency between the transaction first being issued and the transaction being confirmed on the blockchain. The first factor behind the latency is that it takes time for a newly issued transaction to be included in any block; this latency can be reduced by increasing the mining fee. The second factor is that it takes time for a block that includes the transaction to be buried deep enough. Here, a user may trade-off latency with security (in Bitcoin). Other blockchain designs, which we explore in future lectures, may not have this trade-off.
+
+\section*{Validating a block}
+
+\paragraph{The state of the system} In the above discussion, we covered many important points explaining how Bitcoin enables a money-exchange system. One issue that was skirted is, how do users verify that a single coin is not spent twice? In the context of Bitcoin, this issue boils down to verifying that a transaction's inputs have not been spent already. As such, the only way to verify this is to keep track of the set of UTXOs (unspent transaction outputs) at all times. This set is often referred to as the \textbf{state} of the system. Note that these outputs are for those transactions that are already in the blockchain, and have not been spent in the blockchain. Thus, the state changes  every time the longest-chain grows (or more generally, changes). It is important to note that the state is separate from the mempool, but is linked in the following way. Honest users build a block from transactions in the mempool. However, they only choose those transactions that are valid, and they check the validity using the information in the state. In an account-based model, the state would simply be the roster of all account balances. More generally, the state of a blockchain system contains a summary of all the entries in the ledger thus far, which can be used to validate new entries. 
+
+Figure \ref{fig:utxo_size} shows the number of UTXOs in the Bitcoin system as a function of time. Clearly, it has grown many-fold since the beginning, and it will continue to grow as Bitcoin becomes more popular. With each UTXO being a few hundred bytes, the size of the UTXO set is now over $5$ GB. As such, this might seem like a moderate amount which can be easily stored. However, each node must perform many read, write and delete operations on this set. Thus, the set must be stored in the memory (preferably, on-chip memory) rather than on the disk. Given this requirement, the UTXO size is too large for regular devices to store; it requires specialized hardware. The large UTXO size is another dimension of the scalability challenge. %\pramod{point out that this growing in size over time. give some numbers to get an idea of the current size. }
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/UTXO_size.png}
+    \caption{Number of UTXOs over time in Bitcoin. Figure sourced from \href{https://www.blockchain.com/charts/utxo-count}{here}}
+    \label{fig:utxo_size}
+\end{figure}
+
+\paragraph{Validating blocks} When a miner receives a new block, it must perform certain sanity checks, of which two are important. First, it checks whether the proof-of-work meets the required threshold. Second, it checks whether the transactions in the block are consistent with the state. This means that it must check whether every input in every transaction belongs to the state or not. If it does, the miner accepts the block, removes the relevant transactions from its mempool, and also updates the state. Updating the state involves deleting spent transaction outputs and adding the newly generated ones. While constructing a new block to mine on, the same validation steps are taken preemptively.
+
+\paragraph{Light nodes and stateless clients}
+Storing the state of the system and validating each transaction in every block requires storage and computation power. Bitcoin allows for light nodes/clients, who can participate in the system with much lesser computation and storage power. A light client merely verifies the proof of work on blocks. It may further selectively verify the validity of transactions, especially those that concern itself. As such, a light client does not store the state of the system which prevents it from validating transactions.
+
+There are proposals to augment the functionality of light nodes, by creating so-called \textbf{stateless nodes}. These nodes can validate transactions/blocks without storing the full state at all times. They merely download the requisite state information to validate a block, one block at a time, and then delete it once the block is validated. In order to do so securely, the state is stored in the form of an accumulator, which we discussed in Lecture 2. The stateless client option is being pursued vigorously by Ethereum. See, e.g., the discussion \href{https://ethresear.ch/t/the-stateless-client-concept/172}{here}. A fully functional stateless client for Bitcoin, which makes use of Merkle tree accumulators, has been built by the \href{https://www.media.mit.edu/projects/utreexo/overview/}{UTREEXO project}.
+
+\section*{Smart contracts}
+So far, we have seen how blockchains can be used to implement a currency system. Essentially, the blockchain as a ledger records payments from one party to another, thereby keeping tab of all parties' balances. Transactions are simply messages recording the transfer of money. However, blockchains are much more versatile; they can also be used to run \textit{smart contracts}. Smart contracts are programs that are run by the peers in the blockchain system. The notion of a transaction is broadened to include these pieces of code as well. Smart contracts come into play when two parties want to exchange money subject to some terms and conditions. In the physical world, they would draw up a contract. A trusted third party/authority would be needed to ensure that both parties follow the contract. When run on a blockchain, smart contracts eliminate the need for a single trusted third-party. Instead, the decentralized trust of the blockchain (in other words, the honest majority of the system) ensures that the contract gets executed correctly.
+
+In this lecture, we only focus on smart contracts in Bitcoin, which are rather limited in scope. Ethereum, a subsequent cryptocurrency, allows for much more diverse programs as smart contracts; we will learn about that in a later lecture.
+
+\paragraph{Scripts in Bitcoin}
+Smart contracts are simply called scripts in Bitcoin. To understand scripts, we need to broaden our understanding of transactions from merely statements recording the transfer of money. As we saw before, a transaction consists of inputs and outputs, with outputs recording the transfer of Bitcoins to some address. What we did not mention before is that every transaction output includes a script, consisting of \textit{opcodes}, which specify conditions that must be satisfied in order to spend the coins mentioned in the output. The default condition is that the spender of the output must provide a public key that hashes to the pertinent address, and must sign the message with the corresponding private key. Earlier, we presented this as a sanity check; however, this is explicitly specified as a script in every regular transaction.
+
+Bitcoin scripts also allow for additional conditions, such as requiring that the transaction is not spent until a particular time, requiring that a transaction is spent by a particular time, requiring a message that is signed by multiple private keys, etc.
+An interesting and useful script that emerges from a combination of these conditions is that of a hashed timelock contract (HTLC). HTLCs are useful in setting up escrow funds. If Alice wants to pay Bob in exchange for some other good, then Alice would like to pay Bob only after she is guaranteed to get the good from Bob, and Bob would like to release the good only after he is guaranteed to be paid by Alice. An HTLC enables such terms to encoded as a smart contract on a blockchain. You can learn more about HTLCs \href{https://www.investopedia.com/terms/h/hashed-timelock-contract.asp}{here}. A full list of opcodes used in the Bitcoin script is given \href{https://en.bitcoin.it/wiki/Script}{here}.
+
+\section*{Reference material}
+
+{\sf Perigee} is a recent P2P protocol that adapts the network topology to a random geometric network, presented in ``\href{https://dl.acm.org/doi/abs/10.1145/3382734.3405704}{Perigee: Efficient Peer-to-Peer Network Design for Blockchains}," 
+Mao, Deb, Venkatakrishnan and Kannan, PODC 2020. %{\sf Perigee} uses ideas from the \href{https://epubs.siam.org/doi/abs/10.1137/S0097539701398375}{multi-armed  bandit}  problem in theory of statistical  decision making. 
+
+{\sf Dandelion} networking was invented in ``\href{https://dl.acm.org/doi/abs/10.1145/3084459}{Dandelion: Redesigning the Bitcoin Network for Anonymity}," Fanti, Venkatakrishnan and Viswanath, Sigmetrics 2017. 
+
+
+\input{Problem_sets/Lec4_PS}
+\end{document}

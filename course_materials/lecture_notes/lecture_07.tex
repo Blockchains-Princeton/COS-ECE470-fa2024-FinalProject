@@ -1,0 +1,208 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{markdown}
+\usepackage{amsthm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\xw}[1]{{\color{green}
+\footnotesize[Xuechao: #1] }}
+%\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+%\let\proof\relax
+%\let\endproof\relax 
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 7}
+\cfoot{\thepage}
+
+\title{Lecture 7:   Liveness of Bitcoin}
+\author{Principles of Blockchains, Princeton University,  \\ Professor:  Pramod Viswanath \\ Scribe:  Xuechao Wang}
+%\date{February 16, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In the previous lecture we have considered {\em safety} of a block: the event that once a block is deemed to be confirmed (because it is buried deep enough in the longest chain), then the probability it will be deconfirmed is small. While safety is a very important security property of a blockchain protocol, an equally important is {\em liveness}: this is the event that (honest) transactions get included into blocks, and further that the blocks feature in the longest chain. Liveness ensures that all transactions make their way into the ledger and safety ensures that eventually the transactions stay permanently in the ledger (with high probability). Together liveness and safety ensure the {\em security} of the blockchain protocol. The focus of this lecture is the liveness of the longest chain protocol. We will see that the longest chain protocol is live exactly under the conditions that the protocol is safe (derived in the previous lecture). We quantify the ``level" of liveness and make connections to how fairly the incentives are distributed among the honest and adversarial miners. As part of this study, we  identify  worst-case adversarial strategies that minimize liveness  and fairness (in incentive distribution). Finally we study a simple, but powerful, modification to the longest chain protocol that yields optimal liveness and fairness properties. 
+\end{abstract}
+
+\section*{Chain Quality}
+
+We begin with two properties of a longest chain in the blocktree that will help us quantify the level of liveness of the protocol.  
+
+\begin{definition}[Chain Growth]
+For a blockchain protocol, we define the chain growth of a longest chain $\mathcal{C}$ as the average growth rate of  $\mathcal{C}$ (number of blocks per unit time), denoted as ${\rm CG}(\mathcal{C})$.
+\end{definition}
+
+
+\begin{definition}[Chain Quality]
+For a blockchain protocol, we define the chain quality of a longest chain $\mathcal{C}$ as the fraction of honest blocks in $\mathcal{C}$, denoted as ${\rm CQ}(\mathcal{C})$.
+\end{definition}
+
+Positive chain growth ensures that the chain keeps growing and new blocks are continuously added to the longest chain. Due to the random nature of the mining operation, an honest miner will have a non-zero chance to succeed in mining a block. Thus CG is  positive as long as the honest mining power $(1-\beta) > 0$. However, this is not enough to guarantee  liveness: this is because a block mined by an adversary   may fail to include honest transactions (or even be empty) and the entire longest chain may be made up of such adversarial blocks. However, positive chain quality ensures that a positive fraction of blocks mined by honest nodes enter the longest chain. Thus positive chain growth and positive chain quality together combine to  ensure that any honest transaction will eventually be added to a block on the longest chain and to the ledger, which gives us  liveness. 
+
+Now that liveness is guaranteed, one can study a more fine grained property of {\em fast time scale liveness}: having enough blocks mined by honest nodes on the longest chain (i.e., high CQ) ensures that transactions enter the blockchain at a fast clip -- thus CQ helps quantify the level of liveness. Furthermore, CQ quantifies  {\em fairness}:  since block rewards are provided to blocks in the longest chain, having blocks mined by honest nodes in the longest chain ensures that honest miners are rewarded. Next we will derive lower-bounds on chain growth and chain quality as a function of  adversarial fraction of hash power $\beta$, total mining rate $\lambda$ and maximum network delay $\Delta$.
+
+We first derive the lower bound on the chain growth. As we have seen in Lecture 6, under the limit of a very large number of honest miners (each with infinitesimally small mining power), the growth rate of a pure honest chain is $\frac{(1-\beta)\lambda}{1+(1-\beta)\lambda\Delta}$ when the network delays for all messages are exactly $\Delta$. One can see that the adversary really cannot do anything better than this. Delivering an honest block earlier than $\Delta$ time or publishing any adversarial block will just increase the chain growth. Therefore, we have the bound:
+\begin{equation}
+\label{eqn:cg}
+    {\rm CG} \geq \frac{(1-\beta)\lambda}{1+(1-\beta)\lambda\Delta}.
+\end{equation}
+
+Next we derive a lower-bound on the chain quality. If the chain growth is CG and the adversary can mine blocks at a rate of at most $\beta \lambda$, by the definition of the chain quality, we have a lower bound:
+\begin{equation}
+\label{eqn:cq}
+    {\rm CQ} \geq \frac{{\rm CG}-\beta \lambda}{{\rm CG}}, 
+\end{equation}
+where the equality is achieved when every adversarial block enters the longest chain. Plugging (\ref{eqn:cg}) into (\ref{eqn:cq}), we have
+\begin{equation}
+    {\rm CQ} \geq \frac{\frac{(1-\beta)\lambda}{1+(1-\beta)\lambda\Delta}-\beta \lambda}{\frac{(1-\beta)\lambda}{1+(1-\beta)\lambda\Delta}} = \frac{1-2\beta - \beta(1-\beta)\lambda\Delta}{1-\beta}.
+\end{equation}
+
+One can check that ${\rm CQ > 0}$ if $\frac{(1-\beta)}{1+(1-\beta)\lambda\Delta} > \beta$, which is exactly the same threshold as the safety guarantee as we have seen in Lecture 6. Therefore, we can conclude the following security guarantee on the longest chain protocol.
+\begin{theorem}
+The longest chain protocol is safe and live, exactly under the following condition:  $\frac{(1-\beta)}{1+(1-\beta)\lambda\Delta} > \beta$.
+\end{theorem}
+
+In Lecture 6, we have seen that the private attack achieves the security threshold. Now a natural question would be: is there a specific adversarial strategy that achieves the minimum chain quality? A ``selfish mining" attack  described in \href{https://arxiv.org/abs/1311.0243?source=post_page---------------------------}{this paper}, answers this question and is discussed next. Before that, one can see that to achieve the minimum chain quality, the attack has to guarantee two properties: 
+\begin{itemize}
+    \item  every adversarial block enters the longest chain; so every adversarial block is useful.
+    \item every adversarial block displaces an honest block in the longest chain; so every adversarial block is doubly useful. 
+\end{itemize}
+
+
+\section*{Selfish Mining}
+Consider the following adversarial strategy (see Figure \ref{fig:selfish}):
+\begin{itemize}
+    \item The adversary always mines on the block at the tip of the longest chain, whether the chain is  private or public. Upon successful mining, the adversary maintains  the block in private to  release it at an appropriate time (discussed next). 
+    \item When an honest miner publishes a block the adversary will release a previously mined block at the same level (if it has one). We assume that the adversary can break ties in its favor, so honest miners will mine on the adversarial block.
+\end{itemize}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width =13cm]{figures/selfish.png}
+    \caption{Selfish mining example.}
+    \label{fig:selfish}
+\end{figure}
+
+
+
+\section*{Optimal Chain Quality}
+
+If the adversary decided to follow protocol, then the chain quality of the longest chain protocol would be ${\rm CQ} = 1- \beta$; indeed one cannot expect any CQ better than this. A natural question would be: can we improve the design of the longest chain protocol to achieve this optimal chain quality under arbitrary adversarial strategy? Especially interesting would be if this design were only a slight modification of the longest chain protocol.  \href{https://eprint.iacr.org/2016/916.pdf}{Fruitchains} is one such modification that achieves optimal CQ, and at fast time scales.
+
+In the longest chain protocol, safety of a block (provided by how many blocks are mined underneath) and  the incentives associated with a block (both the transaction rewards and block rewards, cf.\ Lecture 5) are {\em coupled}. The key idea of Fruitchains is to {\em separate} the two properties -- incentives and safety  -- by embodying them in two separate block structures:
+\begin{itemize}
+    \item  a {\em transaction block}, which contains all the transactions (or {\sf data}) of the blocks in the longest chain protocol; 
+    \item a {\em proposer block}, which contains the header of the blocks in the longest chain protocol. 
+\end{itemize}
+It is  important to cryptographically {\em couple} the two types of blocks and this is done via 
+embedding the hash of each transaction block inside one of the proposer blocks (see Figure~\ref{fig:fruitchains1}). 
+The two types of blocks are further coupled during the mining process via ``2 for 1 mining", also known as {\em cryptographic sortition}. This is described next.
+
+\begin{figure}
+    \centering
+    \includegraphics[width =10cm]{figures/prism0.png}
+    \caption{Comparison between blocks in the longest chain protocol and the transaction and proposer blocks in Fruitchains.}
+    \label{fig:fruitchains1}
+\end{figure}
+
+
+
+
+\subsection*{Cryptographic Sortition}
+In the mining process, the two types of blocks -- transaction and proposer blocks -- are mined {\em together}. A miner first forms a ``superblock", essentially the same as a regular block in the longest chain protocol: the superblock contains two parts, a  transaction block and a  proposer block.   However this is where the similarity ends. We say a superblock is successfully  mined if 
+\begin{equation}
+    Hash({\sf nonce}, {\sf superblock}) < T_{\rm tx} + T_{\rm prop}. 
+\label{eq:sortition}
+\end{equation}
+Further, every successfully mined superblock is identified as either a transaction block or a proposer block based on the hash output: 
+\begin{itemize}
+    \item 
+identify the superblock as a proposer block if the hash output is less than $T_{\rm prop}$; 
+\item identify the superblock as a transaction block if the hash output is in the range $[T_{\rm prop}, T_{\rm tx} + T_{\rm prop})$.
+\end{itemize}
+Due to the random output nature of hash functions, the probability a superblock is identified as a proposer (transaction)  block is proportional to $T_{\rm prop}$ ($T_{\rm tx})$, respectively. This process where two distinct types of blocks are mined jointly and only one of the blocks is identified as the output of the mining process is known as ``two-for-one mining" or ``cryptographic sortition" (see Figure~\ref{fig:sortition}). 
+
+\begin{figure}
+    \centering
+    \includegraphics[width =10cm]{figures/sortition.png}
+    \caption{Superblock containing a transaction block and a  proposer block is ``two-for-one" mined; the resulting  cryptographic sortition identifies either the transaction or proposer block as the winner of the mining process.}
+    \label{fig:sortition}
+\end{figure}
+
+\iffalse
+\pramod{
+1) explain high level idea of Fruitchains. deconstruction of the blocks' roles. separate transactions (data or fruits/rewards) from the security enabled by the longest chain protocol. This creates two types of blocks. this story is similar to Prism deconstruction story, except voting blocks are not there.
+
+2) then talk about the need to couple the two types of blocks; after all security has to be joint. bring up sortition and 2:1 mining. 
+
+3) next bring up  a  prism 1.0 like structure. Point out why it has optimal CQ, under selfish mining attacks. how about the setting of the threshold for 2:1 mining? what impact does that have on optimal CQ under selfish mining? 
+
+4) now adversary ma deviate from protocol even in publishing tx blocks. it could mine tx blocks in private and then release it at an opportune time. to avoid this, we do reverse pointer from tx blocks to tip of the longest chain. (parent blocks in your language). Summarize the full Fruitchains protocol. does this impact hash threshold setting? if so how? 
+
+5) Give an intuitive argument for the overall security of the fruitchain protocol and optimal CQ. ideally as much  full proof as possible, using the notation and proof results from before.
+}
+\fi
+
+\subsection*{Fruitchain Protocol}
+
+We can put together the cryptographic sortition process to summarize the Fruitchains protocol. Every miner creates a superblock containing a transaction block (consisting of transactions not in the ledger) and a proposer block (which has a hash pointer to the parent proposer block and hash pointers to {\em all} the transaction blocks that are not referred by its proposer ancestors). The  proposer block mining is conducted using the longest chain rule and transaction blocks have no chaining or constraints.  See Figure \ref{fig:fruitchains1} for illustration. The success of the superblock mining process is decided by Equation~(\ref{eq:sortition}) and the actual hash output decides whether to interpret the superblock as a transaction block or a proposer block.  The ledger is an ordered list of transactions and is generated as follows: order the proposer blocks according to the longest chain,  order the transaction blocks referred to by each proposer block (e.g., ordered based on the hash value of the transaction block) and further order   the transactions within a transaction block (e.g., lexicographic ordering of the transactions in the Merkle tree representation). 
+We argue the safety and liveness properties of the fruitchain protocol as follows. 
+
+\noindent {\bf Safety}. Let $\lambda_{\rm tx}$ and $\lambda_{\rm prop}$ be the mining rate of the transaction blocks and proposer blocks respectively; these mining rates are directly proportional to the difficulty targets $T_{\rm tx}$ and $T_{\rm prop}$, respectively. The safety of this protocol  follows directly from the safety of the longest chain protocol: as long as $\lambda_{\rm prop}$ is small enough, i.e., 
+$$\frac{(1-\beta)}{1+(1-\beta)\lambda_{\rm prop}\Delta} > \beta,$$
+the $k$-deep proposer block in the longest chain will be permanent with high probability (for large enough $k$). This stabilizes the ledger guaranteeing safety. 
+
+\noindent {\bf Liveness}. The main claim is that the optimal CQ of $1-\beta$ is achieved  regardless of the adversarial strategy on transaction and proposer block mining. We first examine the selfish mining attack: even if an adversary tries to ``erase'' some proposer blocks mined by an honest party (which contains some honest transaction blocks) by selfish mining, by the liveness (positive CQ and CG) of the the longest chain protocol, eventually an honest party will mine a new proposer block including those transaction blocks that were displaced and with large enough $k$, this proposer block will be safely included in the ledger. We know that the mining of the honest and adversarial transaction blocks follows Poisson process with rate $(1-\beta)\lambda_{\rm tx}$ and $\beta \lambda_{\rm tx}$ respectively. And by the liveness of the the longest chain protocol, every honest transaction blocks will be eventually included into the proposer chain. Therefore, by considering an average on the entire longest proposer chain, we have 
+$$ {\rm CQ} \geq \frac{(1-\beta)\lambda_{\rm tx}}{(1-\beta)\lambda_{\rm tx} +\beta\lambda_{\rm tx}} = 1-\beta.$$
+Note that here we define chain quality as the fraction of {\em honest transaction blocks}  instead of honest proposer blocks, and further determining mining rewards by transaction block yields fair rewards. It is interesting to note that the safety and optimal CQ properties of the Fruitchains protocol do not constrain the mining rate $\lambda_{\rm tx}$ of transaction blocks (determined by the difficulty target $T_{\rm tx})$. However, having a low difficulty target $T_{\rm tx}$ will lead to a large rate of production of transaction blocks which will need to be distributed over the underlying network. In the next lecture we will see that the constraint on the transaction block mining rate imposed by a careful modeling of the network capabilities (capacity and delay). 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=8cm]{figures/fruitchains.png}
+    \caption{The Fruitchains protocol. }
+    \label{fig:fruit}
+    \vspace{-0.2in}
+\end{figure}
+
+\noindent {\bf Finetuning the Fruitchains protocol}. The Fruitchains protocol described above guarantees long term optimal chain quality. However, in the context of a short timescale, the protocol is vulnerable to a private  block attack: an attacker could keep successfully mined transaction blocks private, and suddenly release a large number of them at the same time, thereby creating a very high fraction of adversarial transaction blocks in some small segment of the proposer chain. This issue is  resolved by  requiring that a transaction block should ``hang'' from a proposer block which is not too far from the proposer block which includes it.  Each  the transaction block has  two parent blocks, a  confirmed parent and a proposer parent: the confirmed parent is a recently stabilized/confirmed proposer block (i.e., $k$-deep block) that the transaction is hanging from; the proposer parent should be the tip of the longest proposer chain. Note that a proposer block  also has a confirmed parent because the transaction block mining and proposer block mining are conjoined  by the two-for-one mining process, although the proposer block generation and interpretation does not care about this field. See Figure~\ref{fig:fruit} for an illustration. We say that a transaction $B_{\rm tx}$ is recent with respect to a proposer chain $\mathcal{C}$ if the confirmed parent of $B_{\rm tx}$ is a block that is at most $R$ deep in $\mathcal{C}$, where $R$ is a {\em recency} parameter. Our goal is achieved by requiring  proposer blocks only include recent transaction blocks. By setting the recency parameter $R$ reasonably large, any transaction block mined by an honest player will be included sufficiently deeply in the proposer chain. Therefore, the optimal CQ property continues to hold true. Moreover, since only recently mined transaction blocks can be included, the optimal CQ is achieved even for  short segments of the longest chain. 
+
+
+
+\iffalse
+Fruitchains runs an instance of the longest chain protocol but instead of directly putting the transactions inside the blockchain, the transactions are put inside ``fruits'' and fruits are included by blocks. Mining fruits also requires solving some PoW puzzle. Fruitchains uses \textit{cryptographic sortition} (a.k.a. {\it 2-for-1 mining}) to ensure that miners mine blocks and fruits concurrently and they do not know the type of the blocks until the puzzle is solved. Miners combine the contents of a block and a fruit they are mining into a \emph{superblock} and perform proof-of-work mining on it. The range of a valid proof-of-work is divided into two disjoint intervals $[0,T_b)$ and $[T_b, T_b + T_f)$, corresponding to a block or a fruit respectively. Whether a superblock is a block or a fruit is then decided by looking at which interval its proof-of-work falls into.
+Additionally, in Fruitchains, a fruit is required to ``hang'' from a block which is not too far from the block which includes the fruit.
+
+In Fruitchains, each of the fruit will have two parent blocks, we call them fruit parent and block parent: the fruit parent is a recently stabilized/confirmed block (i.e., $k$-deep block) that the fruit is hanging from; the block parent should be the tip of the longest chain. Actually a block will also have a fruit parent because the fruit mining and block mining are piggybacked atop each other, but a block actually does not care about this field. See Figure ~\ref{fig:fruit} for illustration. We say that a fruit $B_f$ is recent w.r.t. a chain $\mathcal{C}$ if the fruit parent of $B_f$ is a block that is at most $R$ deep in $\mathcal{C}$, where $R$ is called the recency parameter. The Fruitchains protocol requires that blocks only include recent fruits. Intuitively, the reason why fruits need to be recent is to prevent the ``fruit withhold attack'': without it, an attacker could withhold fruits, and suddenly release lots of them at the same time, thereby creating an very high fraction of adversarial fruits in some small segment of the chain.
+
+Intuitively, the reason why the Fruitchains protocol guarantees optimal CQ is that even if an adversary tries to ``erase'' some block mined by an honest player (which contains some honest fruits), by the liveness of the the longest chain protocol, eventually an honest player will mine a new block including those fruits and the block will be stable -- in fact, by setting the recency parameter $R$ reasonably large, we can make sure that any fruit mined by an honest player will be included sufficiently deep in the chain. Moreover, since only recently mined fruits can be included, the optimal CQ is achieved even for some short segment of the chain, which provides fast time scale liveness. 
+
+Fruitchains can be easily adapted to work under a variable mining power setting. We can adjust the mining difficulty using the same way as the Bitcoin rule (as we have seen in Lecture 3), and the mining targets of transaction block and proposer block remain the same ratio using two-for-one mining. If rewards and transaction fees are designed to distribute proportional to the transaction block mining difficulty, then this protocol still guarantees optimal CQ under a variable mining power setting.
+
+\fi
+%\section*{Scaling Bitcoin}
+%How to improve the design of the longest chain protocol to achieve optimal chain quality? Introduce Prism 1.0 (long time scale CQ optimality) and Fruitchains (short time scale CQ optimality). This type of an improvement is an example of improving the longest chain protocol's core design, while not deviating too far. This type of design will be a guiding principle for the next module of the course: Scaling Bitcoin. Here we will improve throughput, latency and compute/storage/communication requirements of Bitcoin. 
+
+
+\input{Problem_sets/Lec7_PS}
+
+\end{document}

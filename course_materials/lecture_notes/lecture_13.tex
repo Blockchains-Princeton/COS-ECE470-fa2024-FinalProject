@@ -1,0 +1,339 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{markdown}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsthm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\newcommand{\indicator}{{\bf 1}}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\xw}[1]{{\color{green}
+\footnotesize[Xuechao: #1] }}
+%\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{remark}{Remark}
+
+\newcommand{\singlechain}{\Pi_{\texttt{single}}}
+\newcommand{\multichain}{\Pi_{\texttt{multi}}}
+\newcommand{\mchain}{\texttt{chain}}
+\newcommand{\chain}{\texttt{SemChain}}
+\newcommand{\finalization}{\texttt{Finalization}}
+\newcommand{\lists}{\mathcal{L}}
+\newcommand{\depth}{\texttt{index}}
+
+%\let\proof\relax
+%\let\endproof\relax 
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 13}
+\cfoot{\thepage}
+
+\title{Lecture 13: Transaction Ordering and Fairness}
+\author{Principles of Blockchains, University of Illinois,  \\ Professor:  Pramod Viswanath \\ Scribe:  Soubhik Deb}
+\date{March 11, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Consensus in blockchains this far refers to an ordered sequence of blocks. We have not paid attention to the  ordering of the transactions within a block, which is left to the miner who assembles the block. The ordering is important because the fees associated with the transactions and the value of the native tokens at different points in the ledger  can depend on the ordering. The importance of fair ordering is  underscored by massive {\em frontrunning} attacks on the popular blockchain {\sf Ethereum}. A fair ordering of transactions would mean that if one transaction was transmitted before another one, then this ordering would be maintained in the final ledger.  In this lecture, we demonstrate a clean adaptation of the longest chain protocol to incorporate  fair transaction ordering. We  discuss how to quantify the level of fairness of the ordering (different nodes can see different ordering due to network delays, be they natural or through adversarial action) and show that the adaptation only adds a modest extra latency to the $k$-deep confirmation rule while guaranteeing high confidence of fair ordering.   
+\end{abstract}
+
+
+
+\section*{Introduction}
+In centralized financial (CeFi) markets, the ordering in which market orders are executed in the exchanges plays a crucial role in making a profit or loss of millions or potentially, billions of dollars. However, such high-stakes also incentivizes adversarial actors to engage in manipulating the execution ordering of these market orders. Such practices are termed as \textbf{frontrunning}. See Fig.~\ref{fig:frontrunning} for an illustration of a frontrunning attack.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/frontrunning.pdf}
+    \caption{Suppose that the share price for some arbitrary company is increasing. After observing the buy order of the honest trader, the adversary creates its own buy order and gets it somehow executed before the former in the exchange. An adversarial trader could do so via bribing, self-dealing, being privy to inside information, etc. Now, the adversarial trader can sell these shares to the honest trader at a profit.}
+    \label{fig:frontrunning}
+\end{figure}
+Frontrunning is strictly monitored and prohibited in the centralized stock exchanges and past incidents of frontrunning have resulted in fines worth millions of dollars by SEC and FBI. 
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/frontrunning_real_world_example.pdf}
+    \caption{A bot sitting in the {\sf Ethereum} executed couple of token swaps atomically using a smart contract. The smart contract takes advantage of the arbitrage in the exchange rate between Ether (native token in {\sf Ethereum}) and NFTX token (an ERC20 token) in two different DEXes, Uniswap and Sushiswap. Seeing the increasing demand for NFTX in Sushiswap, the smart contract employs frontrunning to swap Ether for NFTX in Uniswap and then sells these NFTX tokens in Sushiswap at a profit. In terms of the exchange rate between Ether and USD at the above timestamp, the bot executing this frontrunning made a profit of greater than \$900 in a single atomic pair of transactions.}
+    \label{fig:frontrunning-real-world}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/transaction_fees.pdf}
+    \caption{Ever since DeFi came into the mainstream in the summer of $2020$, there has been an exponential increase in transaction fees in {\sf Ethereum}, primarily, due to frontrunning.}
+    \label{fig:transaction-fees}
+\end{figure}
+% are included
+
+With the rising prominence of the decentralized finance (DeFi) industry, similar order manipulation via frontrunning has become very lucrative. Unlike in CeFi, this phenomenon has been exacerbated in DeFi due to the lack of any trusted authority that can regulate financial malpractices in the decentralized setting. As the order in which transactions are included in a block in the blockchain depends on the discretion of the miner of that block, the miners are generally incentivized to arrange those transactions earlier that earn them the most transaction fees. So, a client can pay a large transaction fee to have a frontrunning transaction ordered earlier in the blockchain. On the other hand, the clients that are victims of such frontrunning attacks have no way to know, verify and get redressal from such a nefarious ordering event. This has given rise to  rampant order manipulation in DeFi as indicated by  bots embedded inside public blockchains (e.g., {\sf Ethereum}) and generating frontrunning transactions. According to one estimate, these frontrunning bots in {\sf Ethereum} have proved to be very successful and have extracted a profit of more than \$300 million since January 2020. Fig.~\ref{fig:frontrunning-real-world} illustrates a real-world example of frontrunning attack in DeFi in which a frontrunning bot takes advantage of the arbitrage in the exchange rates between different decentralized exchanges (DEX) to make a substantial profit. The immediate externality from frontrunning attacks in DeFi is in the dramatic increase in the transaction fees (known as ``gas"), as evident from Fig.~\ref{fig:transaction-fees} for {\sf Ethereum}. The increase in transaction fee occurs because there can be multiple competing bots trying to frontrun the {\em same} transaction: a frontrunning bot  iteratively bids up its transaction fees in order for its frontrunning transaction to get ordered in a block by the miner ahead of the transactions  of any of its competing bots or the original transaction which is being targeted for frontrunning. Additionally, there can be many failed transactions (because they ran out of gas) and reverted transactions from frontrunning which can occupy valuable space in the blockchain. Thus, these frontrunning attacks have resulted in negative externalities in {\sf Ethereum}:  network congestion in the peer-to-peer network and reduced block space usage in the chain.   The frontrunning attacks have also contributed to the miner reaping as much profit (known as ``miner-extractable value") in the form of transaction fees as possible from ordering-for-profit. 
+ 
+
+One possible solution is to impose a fixed  fee that is agnostic to the actual value of that transaction (this is the essence of EIP-1559, a recent improvement proposal for {\sf Ethereum}). However, a   frontrunning bot can simply collude with a miner in an off-chain market and get its frontrunning transaction ordered earlier. So the challenge remains: can one design a fair-ordering consensus protocol  that is provably secure  against manipulation of transaction ordering? Of specific interest is a simple transaction ordering strategy  that can be readily incorporated alongside  the longest chain protocol. Such is the goal of this lecture. 
+
+ 
+%  in a block depends on the discretion of the proposer of the block. For instance, a node in the blockchain typically orders the transactions based on the transaction fees. However, the miner can manipulate the order of transactions within the block according to another heuristic. This incentivizes the miners to engage in \textbf{frontrunning} whereby they can suitably order the transactions that makes them highest profit. See Fig.~\ref{fig:frontrunning} for an illustration.
+
+
+
+
+
+% Consider the following example of   {\bf front-running} bots in  {\sf Ethereum}: 
+% \begin{quote}
+%     if someone is about to buy a large amount of ETH (short form of ether, the native token in {\sf Ethereum}) on a cryptocurrency exchange, to such an extent that it would drive the price higher, one way to cash in would be to buy ETH right before the large purchase goes through and then sell immediately after. This entails the front-running bot to place higher gas price on its transaction of buying ETH. By placing a  higher gas price, even if the transaction corresponding to the large purchase is received by most nodes earlier than the front-running transaction placed by the bots, the miner has an incentive in having front-running transaction ordered earlier.
+% \end{quote}
+%  Nodes have no way to verify whether such a nefarious ordering event occurred. Also, without careful design, a heuristic used by a node for ordering transactions in its block can be susceptible to ordering manipulation by the clients. 
+% According to \href{https://explore.flashbots.net/}{one estimate}, these front-running bots in {\sf Ethereum} have proved to be very successful and have extracted a profit of more than \$300 million since Jan 2020. Without any regulatory oversight in the permissionless blockchain, such manipulation of transaction  ordering  can lead to market instability and unfairness. Therefore, the question is can one design a fair-ordering consensus protocol  that is provably secure  against manipulation of transaction ordering? Of specific interest is a simple transaction ordering strategy  that can be readily incorporated along the longest chain protocol. Such is the goal of this lecture. 
+
+
+%\subsubsection*{Brief Recap}
+%Let $\Delta$ secs be the network delay. We assume that time is discretized into rounds of $\Delta$ seconds each and transactions that arrive in the same round receive the same timestamp. Let $f$ be the per round mining rate and $\beta$ be the fraction of the hashing power that the adversary can control without the compromising the system security, assuming rest of the nodes follow the protocol. $\kappa$ denotes the security parameter. The standard properties of PoW  blockchain are as follows. (1) $T$-common-prefix implies that the chains of two honest nodes differ by at most the last $T$ blocks; This allows nodes to confirm their local chain except for the last $T$ blocks. (2) $(T, \mu)$-chain-quality implies that for any $T$ consecutive blocks, at least $\mu$ fraction are honestly mined; 
+
+%\pramod{(1) At this point it is important to discuss some intuition on how to do transaction ordering, i.e., blocks need to ``vote" on the transaction ordering. 
+
+%(2) Then set up the basic protocol where blocks are colored and within a color order the same transactions. 
+
+%(3) Now do an example of transactions ordered in time, different for different nodes. This is like how Sreeram did in his lecture in the class. 
+
+%(4) Then use that example to show how the tx get ordered in different blocks in the chain. I think the best way to explain the protocol is through an example. Use the example to explain all the corner cases (batching, etc). 
+
+%(5) Finally ask how to evaluate how good the ordering is and what guarantees one can make. This is the time to discuss various possible ordering metrics and which one is good (batch-order fairness). 
+
+%(6)Then use this metric to state the main theorem, in words: ordering confidence is broken with prob exponentially decaying in m, where m is the epoch size. Brief hint on why some metrics dont work is okay -- Condorcet paradox is  way too tangential to this lecture. }
+
+\section*{Fair Ordering Protocol}
+
+
+\begin{figure}
+    \centering
+     \begin{subfigure}[b]{0.25\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/voting_1.pdf}
+         \caption{Voting in longest chain protocol.}
+         \label{fig:voting-1}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.25\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/voting_2.pdf}
+         \caption{$k-$deep confirmation.}
+         \label{fig:voting-2}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.25\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/voting_3.pdf}
+         \caption{Proposal by consensus.}
+         \label{fig:voting-3}
+     \end{subfigure}
+        \caption{Pictorial illustration of the key idea in how to incorporate a simple transaction ordering strategy in longest chain protocol.}
+        \label{fig:transition}
+\end{figure}
+
+
+
+% \begin{figure}
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{figures/basic_protocol.pdf}
+%     \caption{Key idea demonstrating how blocks can be used as an intermediary for reconciling the preferences of the ordering of the transactions among different nodes. In this example, the same set of transactions $\{Tx_1, Tx_2, Tx_3, Tx_4\}$ is contained in each block in the epoch of $m=5$ blocks, where $m$ is a system parameter.  As evident from the vote count, under majority-voting rule, the ordering in the fair-ordered ledger will be: $Tx_1 \rightarrow Tx_2 \rightarrow  Tx_3 \rightarrow Tx_4$.}
+%     \label{fig:basic-protocol}
+% \end{figure}
+
+
+
+In the longest chain protocol, each node has its own preference on how the transactions should be ordered. The obvious question is how to reconcile all of these individual preferences  to get one consistent ordering of transactions across all the honest nodes (we will call it fair-ordered ledger) from the fair-ordering protocol? Recall that as there are Byzantine adversaries in the system who can report fake ordering of transactions to the fair-ordering protocol, adequate security guardrails have to be present while reconciling views from different nodes so that Byzantine adversaries do not manipulate the ordering. Furthermore,  the nodes participating in the longest chain protocol are pseudonymous (no fixed identity) and the participation level is varying. 
+
+\noindent {\bf Key idea}. It is clear that the direct collection of preferences on the ordering of transactions from each node for reconciling all these preferences is not practical --  the associated communication and storage complexities would be horrendous. However, the blocks in the longest chain can serve as  natural intermediaries to sample from, and reconcile,  the diverse ordering preferences. To be precise, when a block $B$ is mined by an honest miner, the miner orders the transactions inside the block according to its own preferences of the ordering of those transactions. Now, when another miner extends the chain from $B$ we have seen that this miner action can be viewed as   casting a ``vote" of confirmation of the ordering of transactions proposed in block $B$; see Fig.~\ref{fig:voting-1}. When there are $k$ votes, i.e., $B$ is buried $k$-deep in the longest chain, we can confirm the proposed ordering of transactions; see  Fig.~\ref{fig:voting-2}.  Unfortunately, all the descendant blocks of $B$ are voting on the same specific ordering of the transactions in block $B$, authored by the proposer of block $B$. 
+
+The key idea to get around this unilateral proposition of ordering of transactions is the following:  have multiple descendant blocks (say, a sequence of $m$ blocks) come together and propose an ordering of transactions by consensus; see Fig.~\ref{fig:voting-3}. With $m$ sufficiently large, using chain-quality property of longest chain protocol (see Lecture 7), other nodes can be confident that the majority of the blocks in this sequence of $m$ blocks have been mined by honest miners with high probability. Now, the ordering between any pair of transactions $Tx_1$ and $Tx_2$ in the fair-ordered ledger in any honest node is inferred based on whether ``$Tx_1$ is ordered before $Tx_2$" or ``$Tx_2$ is ordered before $Tx_1$" in the majority of the $m$ blocks. The ordering of transactions obtained by consensus among the epoch of $m$ blocks is confirmed after all these $m$ blocks are $k-$deep, that is, $k$ votes have been cast for this ordering. For notational purpose, if $Tx_1$ is ordered before $Tx_2$, then it is represented by $Tx_1 \rightarrow Tx_2$.
+
+
+
+
+
+% Extending this idea, for any pair of transactions, if a large number of blocks contains an ordering between those two transactions, then the ordering which is preferred (``voted") in majority of the blocks can be considered to be the ordering between those two transactions in the fair-ordered ledger. For any pair of transaction $Tx$ and $Tx'$ included in a ordering, let $Tx \rightarrow Tx'$ represent that $Tx$ is ordered before $Tx'$ in that ordering. Referring to Fig.~\ref{fig:basic-protocol}, the same set of transactions $\{Tx_1, Tx_2, Tx_3, Tx_4\}$ are ordered within each block in an epoch of $m$ blocks (which is represented by the same color). In each of the blocks in the next epoch, a different set of transactions will ordered (represented by different color). By employing majority-voting rule among these $m$ blocks in an epoch, the ordering between any two transactions that is preferred by majority among these $m$ blocks is determined as the ordering between those two transactions in the fair-ordered ledger.
+
+% \begin{figure}
+%     \centering
+%      \begin{subfigure}[b]{0.75\textwidth}
+%          \centering
+%          \includegraphics[width=\textwidth]{figures/transaction_ordering.pdf}
+%          \caption{For illustration purpose, consider the preferred transaction ordering in five honest nodes. Observe that these nodes, being honest, have ordered the transactions according to the timestamps in which they received these transactions locally.}
+%      \label{fig:transaction-ordering}
+%      \end{subfigure}
+%      \hfill
+%      \begin{subfigure}[b]{0.75\textwidth}
+%          \centering
+%          \includegraphics[width=\textwidth]{figures/final_transaction_ordering.pdf}
+%          \caption{Ordering the transactions in the fair-ordered ledger. Due to the circular ordering of $Tx_2 \rightarrow Tx_3 \rightarrow Tx_4 \rightarrow Tx_5 \rightarrow Tx_6 \rightarrow Tx_2$, these transactions are ordered together in a batch in the fair-ordered ledger.}
+%          \label{fig:final-transaction-ordering}
+%      \end{subfigure}
+%         \caption{Pictorial representation of the key idea.}
+%         \label{fig:key-idea}
+% \end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/transaction_ordering.pdf}
+    \caption{Consider a set of transactions $\{Tx_1, Tx_2, Tx_3, Tx_4, Tx_5, Tx_6, Tx_7\}$. Observe that the same set of transactions are received at different nodes in different orders and at different times. For the sake of convenience, we have illustrated the order and time in which this set of transactions are received for only five honest nodes and one adversarial node. Let the epoch required for reaching a consensus on proposing an ordering of transactions be of size $m=6$. In the blocks mined by the honest nodes $1,2,3,4$ and $5$, the transactions are arranged in the order that they received those transactions locally. On the other hand, an adversarial node can disregard the order in which the transactions are received locally and arrange the transactions in the block it mined in any arbitrary order that suits its needs, like, arranging transactions in the order of decreasing transaction fees.}
+    \label{fig:transaction-ordering}
+\end{figure}
+As mentioned earlier, each node could have its own preference on how to order a set of transactions. The honest nodes deduce their preference of the ordering among these transactions from the order in which they received those transactions locally from the peer-to-peer (p2p) network. Owing to network delay or  adversarial behavior in the network, different nodes might receive the same set of transactions from the p2p network in different orders and at different times; see Fig.~\ref{fig:transaction-ordering}. These differences get reflected in the order in which the transactions are arranged in each of the $m$ blocks in the epoch that are used for reaching consensus on their proposed ordering. Furthermore, a Byzantine adversary can arrange the transactions in arbitrary order in the block it mines so as to influence the final ordering obtained from consensus. However, owing to chain-quality property of the longest chain protocol, this ability of the adversary to do order-manipulation can be made negligible.
+
+
+
+% Under the aforementioned idea of obtaining the ordering of transactions via consensus among $m$ blocks,  that are mined by these nodes. Referring to Fig.~\ref{fig:final-transaction-ordering}, for epoch of size $m=5$, assume that the nodes $1,2,3,4$ and $5$ illustrated in Fig~\ref{fig:transaction-ordering} mine the blocks in the epoch that contain ordering among the transactions in the set $\{Tx_1, Tx_2, Tx_3, Tx_4, Tx_5, Tx_6, Tx_7\}$.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/final_transaction_ordering.pdf}
+    \caption{Pictorial representation of obtaining a fair-ordered ledger from the blockchain.}
+    \label{fig:final-transaction-ordering}
+\end{figure}
+
+After all the $m$ blocks in the epoch are $k-$deep, majority rule can be employed in order to reach consensus on the ordering on the transactions among the $m$ blocks. Observe that, in Fig.~\ref{fig:transaction-ordering}, $Tx_1$ is preferred before other transactions in $5$ out of $6$ blocks in the epoch. So, in the fair-ordered ledger, $Tx_1$ will be ordered before other transactions. As for other transactions, $Tx_2 \rightarrow Tx_3$, $Tx_3\rightarrow Tx_4$, $Tx_4 \rightarrow Tx_5$, $Tx_5 \rightarrow Tx_6$ and $Tx_6 \rightarrow Tx_2$ in majority of the blocks. However, this results in a paradoxical circular ordering. To circumvent this, one idea is to order all these transactions in a paradoxical ordering together in one batch in the fair-ordered ledger as illustrated in Fig.~\ref{fig:final-transaction-ordering}. Continuing ordering in this epoch-by-epoch manner using majority-voting rule and batching, a consistent fair-ordered ledger is obtained at each honest node in the system. 
+
+
+
+
+
+\noindent {\bf Pipelining}. In the fair-ordering protocol presented above, all the blocks within an epoch order the {\em same set} of transactions. This  reduces the transaction throughput by a factor of $m$, the epoch size. What is required is that each transaction should be ordered in a ``streaming" fashion. This can be accomplished by mandating that when a transaction is ordered in a block for the first time, this transaction must be included in the ordering of the transactions of the next $m-1$ descendent blocks. Thus, each transaction has its own epoch of $m$ blocks where it is included in the ordering; see Fig.~\ref{fig:streaming}.
+
+How to order the transactions in the fair-ordered ledger whose epochs are overlapping?  For example, in Fig.~\ref{fig:streaming}, notice that the epoch for transactions $Tx_1, Tx_2, Tx_3, Tx_4$ and the epochs for transactions $Tx_5, Tx_6$ are not the same but overlapping. We address this by requiring the protocol to construct $m$ {\em semantic chains}. Each of these semantic chains is constructed by appending the transaction orderings from the blocks with same color. For example, semantic chain $\texttt{SemChain}_1$ (represented by orange color) is constructed in a streaming fashion by appending the transaction orderings in the orange-colored blocks. Now, as earlier, majority rule is employed in order to reach consensus on the ordering on the transactions among the $m$ semantic chains. 
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figures/streaming.pdf}
+    \caption{Transforming the fair-ordering protocol into a streaming protocol. In the longest chain, all blocks whose depth from the genesis modulo $m$ are the same are assigned the same color. Each of the $m$ semantic chains is constructed by appending the transaction ordering from the blocks with the same color. Observe that each transaction appears only once in each semantic chain. Majority rule is then employed to achieve a consensus on the ordering of the transactions in the fair-ordered ledger.}
+    \label{fig:streaming}
+\end{figure}
+
+
+\section*{Fair Ordering Guarantees}
+The fair-ordering protocol described above outputs a globally-consistent ordering of transactions but how fair is this ordering and how to evaluate that fairness? What guarantees does this fair-ordered protocol make against any possible order manipulation by a Byzantine adversary? 
+The ordering is fair as long as a majority of the $m$ block proposers are honest; this is simply because the overall ordering is based on the majority of the individual $m$ orderings. The fraction of honest miner blocks in the longest chain is known as {\em chain quality} $CQ$; see Equation~3 in Lecture~7. Now with PoW mining rate set slow enough, $CQ > \frac{1}{2}$ when $\beta < \frac{1}{3}$.  The chain quality condition gets more accurate as $m$ increases, with the  fair-ordering protocol guarantees batch-order fairness for $\beta < \frac{1}{3}$ with probability approaching $1$.
+
+We have proposed batch order fairness as the metric to state the ordering guarantees. A detailed discussion about other possible metrics is in the appendix. 
+
+
+\noindent {\bf Increasing the adversarial threshold}. The {\sf Fruitchains} protocol was proposed in Lecture~7 to improve the chain quality to its optimal level;  a natural question is how to adapt the fair-ordering protocol here to the {\sf Fruitchains} setting. We do this by not having blocks of $m$ different colors composing an epoch; instead now fruits of $m$ different colors would compose an epoch (see Fig.~\ref{fig:fruitchain}).  Now, each of the $m$ semantic chains would be constructed by appending the ordering of transactions contained in fruits of same color.
+%Recall that with high probability, chain quality in Fruitchain is approximately given by $1-(1+\epsilon)\beta$ for some $\epsilon > 0$. Then, for $\beta < \frac{1}{2}$, chain quality of $\frac{1}{2}$ is achieved which implies that batch-order fairness is guaranteed. A similar construction can be done for Prism 1.0 where fruits will be instead replaced by transaction blocks \cite{bagaria2019prism}.
+
+
+\noindent {\bf Reducing confirmation latency}. In Lecture~9 we have studied the {\sf Prism} protocol to incorporate multiple voting chains to significantly drop the latency of confirmation, which can be used in conjunction with the  fair-ordering protocol;  see Fig.~\ref{fig:prismify}.  %Using fast confirmation policy in Prism, we can reduce the latency in confirming the blocks and consequently, reduce the time taken for outputting the fair-ordered ledger. Another technique to reduce confirmation latency for achieving ordering in the fair-ordered ledger is to use multiple parallel longest chains. See Fig.~\ref{fig:multi} for an illustration. Now, each of the longest chain can be interpreted as a semantic chain in itself. An additional feature of this modification is that it provides a methodology to combine multiple independent chains in a fair way.
+
+
+
+
+
+\begin{figure}
+    \centering
+     \begin{subfigure}[b]{0.85\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/fruitchain.pdf}
+         \caption{Each of the $m$ semantic chains will be constructed by appending the transaction ordering from the fruits with the same color.}
+         \label{fig:fruitchain}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.85\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/prismify.pdf}
+         \caption{Multiple voter chains are used to reduce the latency for confirmation of blocks.}
+         \label{fig:prismify}
+     \end{subfigure}
+    %  \hfill
+    %  \begin{subfigure}[b]{0.9\textwidth}
+    %      \centering
+    %      \includegraphics[width=\textwidth]{figures/multi.pdf}
+    %      \caption{Parallel longest chains are used to reduce the latency for confirmation of blocks. Now, each of the $m$ semantic chains is a longest chain. This modification also provide a methodology to combine multiple independent chains in a fair way.}
+    %      \label{fig:multi}
+    %  \end{subfigure}
+     \caption{Improvements on the fair-ordering protocol.}
+\end{figure}
+
+
+
+\section*{Zero-Block Confirmation}
+Zero-block confirmation has been a topic of interest from the early days of Bitcoin, and touted as an important step towards the practicality of Bitcoin for day-to-day purchases. With zero-block confirmation property, {\em a node can confirm a transaction without even seeing a single mined block that contains the transaction}. To motivate the gravity of its importance, consider the following payment scenario: Alice wishes to buy a coffee from Carol's Coffee, using Bitcoin, which uses an underlying Nakamoto-style PoW blockchain. Alice pays 0.00001 Bitcoin for her coffee. However, for Alice's transaction to be confirmed by the network, it could take several PoW blocks to make sure the transaction is buried sufficiently deep in the chain. This could be in the order of hours, which makes Bitcoin based payment systems untenable for practical transactions. Now, it is possible that Carol's Coffee can immediately accept Alice's transaction and Alice can get her coffee quickly. But in the longest chain protocols like Bitcoin, ordering of transactions within a block is unilaterally decided by the miner of the block. So, Alice can soon after send a double spending transaction and an adversarial miner can order this double spending transaction from Alice before the transaction made by Alice to Carol's Coffee.
+
+
+
+As described in previous sections, the fair-ordering protocol replaces this unilateral decision-making on the ordering of transactions with a consensus-based proposal on the ordering of transactions. As a consequence, the fair-ordering protocol guarantees the powerful zero-block confirmation property. 
+
+
+
+
+
+
+\section*{References}
+\href{https://arxiv.org/abs/1904.05234}{Flash Boys 2.0} was the first major work which brought attention to the phenomenon of frontrunning that is prevalent in DeFi. This work documented and quantified the widespread and rising deployment of arbitrage bots in blockchain systems, specifically in decentralized exchanges (DEXes). These two articles titled as  \hyperlink{https://medium.com/@danrobinson/ethereum-is-a-dark-forest-ecc5f0505dff}{``Ethereum is a dark forest"} and \hyperlink{https://samczsun.com/escaping-the-dark-forest/}{``Escaping the dark forest"} present interesting real-world case studies on the severity of frontrunning in {\sf Ethereum}. The ubiquity of frontrunning bots necessitated the requirement for a new consensus property called {\em fair-ordering} for distributed systems. \hyperlink{https://eprint.iacr.org/2020/269.pdf}{KZGJ} and  \hyperlink{https://www.usenix.org/conference/osdi20/presentation/zhang-yunhao}{ZSCZA} formalized the definition of fair-ordering in the context of Byzantine consensus and constructed protocols to achieve them.  \hyperlink{https://eprint.iacr.org/2021/139.pdf}{KDK} introduced the first consensus protocol that achieves fair-ordering in permissionless setting.
+
+
+
+
+%\bibliographystyle{unsrt}
+%\bibliography{references}
+
+
+\appendix
+\section*{Possible Definitions for a Fair Ordering of Transactions}
+ 
+An honest node in the blockchain system derives fair-ordered ledger from the longest chain. In order to mitigate manipulation of the order of these transactions, first we need to state a suitable definition for a fair transaction ordering that the ledger must satisfy. We briefly explain multiple candidate definitions that would illustrate the nuances of defining fair transaction ordering. 
+\begin{itemize}
+    \item \textbf{Send-order-fairness}. A strawman approach for ordering transactions would be based on the timestamps \textbf{when} the transactions were broadcast by the clients in the peer-to-peer network.  For instance, if a transaction $Tx$ was sent by a client before another transaction $Tx'$ (possibly by another client), then $Tx$ should appear before $Tx'$ in the fair-ordered ledger of all honest nodes. However, this approach has a big problem: there needs to be a trusted way to timestamp a transaction at the client side. This would require some third-party trusted execution environments, e.g., Intel SGX which doesn't align with the vision of permissionless setting.  
+    \item \textbf{\href{https://arxiv.org/abs/2007.08303}{Time relative fairness} or \href{https://www.usenix.org/conference/osdi20/presentation/zhang-yunhao}{ordering linearizability}}.  This definition requires that if all honest nodes receive a transaction $Tx$ before any honest node receives $Tx'$, then $Tx$ will be ordered before $Tx'$ in the fair-ordered ledger of all honest nodes. In other words, if the \textbf{latest} receive time for $Tx$ at any honest node is before the \textbf{earliest} receive time for $Tx'$ at any honest node, then $Tx$ should be ordered earlier. See Fig.~\ref{fig:linearizability} for an illustration. However, this definition is not sufficient to mitigate the aforementioned frontrunning attacks as it enforces no guarantees on transactions whose receive times are globally interleaved. To be more precise, an adversarial transaction that attempts to front-run an honest user transaction, is most likely to end up getting interleaved with the user transaction in its receive times at different nodes.  Consequently, for most practical frontrunning scenarios, this definition would be vacuous and not particularly useful.
+    \item \textbf{\href{https://www.swirlds.com/downloads/SWIRLDS-TR-2016-01.pdf}{Median fairness}}. Under this definition, if the median of the set of receive times for $Tx$ at all nodes is smaller than the median of the set of receive times for $Tx'$ at all nodes, then $Tx$ should be ordered before $Tx'$ in the fair-ordered ledger of all honest nodes. See Fig.~\ref{fig:median-fairness} for an illustration. Although this definition takes into consideration aforementioned interleaving, however, a protocol guaranteeing median fairness would be vulnerable to order manipulation due to even a single adversarial node reporting a flipped receive timestamp to the protocol. To be precise, consider two transactions $Tx$ and $Tx'$ and five nodes, node $A$, $B$, $C$, $D$ and $E$, where $E$ is the adversary that is Byzantine in nature. $Tx$ is received by nodes $A$, $\cdots$ , $E$ at rounds $1$, $1$, $4$, $4$, $2$ while $Tx'$ is received by the nodes at rounds $2$, $2$, $5$, $5$, $3$. Now, all nodes have received $Tx$ before $Tx'$ and consequently, $median(Tx) < median(Tx')$. However, the adversarial node $E$ could falsely report its receive times for $Tx$ to be round $3$ and that for $Tx'$ to be round $2$. Now, $median(Tx) = median(1,1,4,4,3) = 3 > median(Tx') = median(2,2,5,5,2) = 2$. Thus, even a single Byzantine adversary is able to invert the ordering of transactions $Tx$ and $Tx'$ by reporting false receive times.   
+    \begin{figure}
+    \centering
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/lineraizability.pdf}
+         \caption{For ordering linearizability. The receive time for transactions $Tx$ and $Tx'$ at each honest node are depicted by blue-colored and orange-colored dots, respectively.}
+         \label{fig:linearizability}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/median_fairness.pdf}
+         \caption{For median-fairness. The receive time for transactions $Tx$ and $Tx'$ at each node are depicted by blue-colored and orange-colored dots, respectively.}
+         \label{fig:median-fairness}
+     \end{subfigure}
+        \caption{ Pictorial representation for ordering linearizability and median fairness.}
+        \label{fig:order-}
+\end{figure}
+    \item \textbf{receive-order-fairness}. Intuitively, recalling the aforementioned example of frontrunning, a sound definition for fair ordering of transactions must ensure that if a transaction $Tx$ is \textbf{received before} the transaction $Tx'$ by a \textbf{large fraction} of nodes in the blockchain system, then $Tx$ must be \textbf{ordered before} $Tx'$ in the fair-ordered ledger of an honest node. See Fig~\ref{fig:gamma-receive-order-fairness} for an illustration of this intuition. However, due to \href{https://en.wikipedia.org/wiki/Condorcet_paradox}{Condorcet paradox}, receive-order-fairness is impossible to achieve. To understand this impossibility result, assume that there are currently $N$ nodes -  node $1$, node $2$, $\cdots$, node $N$, in the system. Suppose that the node $1$ received transactions in the order $[Tx_1, Tx_2, \cdots, Tx_N]$ and any node $n \neq 1$ received transactions in the order  $[Tx_n, \cdots, Tx_N, Tx_1, \cdots, Tx_{n-1}]$. Observe that for any pair of consecutive transactions $Tx_n, Tx_{n+1},$ $n \in [1, 2, \cdots, N-1]$, there are $N-1$ nodes that received $Tx_n$ before $Tx_{n+1}$. Also, there are $N-1$ nodes that received $Tx_{N-1}$ before $Tx_1$. This means that any consensus protocol satisfying receive-order-fairness must order $Tx_1$ before $Tx_2$, $Tx_2$ before $Tx_3$, $\cdots$, $Tx_{n-1}$ before $Tx_n$ and $Tx_n$ before $Tx_1$, which is a contradiction. Thus, despite transitive ordering of the transactions at each node, the collective final ordering is non-transitive and paradoxical.   
+\begin{figure}
+    \centering
+    \includegraphics[width=0.98\textwidth]{figures/ordering_manipulation.pdf}
+    \caption{Suppose the transaction $Tx$, broadcast by client $A$ at time $t_1$, is received by a large fraction of nodes at $t'_1$ before client $B$ broadcasts the transaction $Tx'$ at $t_2$. Then, when the blocks containing transactions $Tx$ and $Tx'$ are confirmed at $t_{confirm}$, $\gamma-$receive-order-fairness specifies ordering $Tx$ before $Tx'$ in the fair-ordered ledger of an honest node.}
+    \label{fig:gamma-receive-order-fairness}
+\end{figure}
+    \item \textbf{\href{https://link.springer.com/chapter/10.1007/978-3-030-56877-1_16}{Batch-order-fairness}}. This definition states that if a transaction $Tx$ is \textbf{received before} the transaction $Tx'$ by a large fraction of nodes in the blockchain system,  then the fair-ordered ledger will order $Tx$ \textbf{no later} than $Tx'$. Observe that this definition is a relaxation on receive-order-fairness. Referring to the example given in receive-order-fairness, the paradoxical orderings due to Condorcet paradox can be sidestepped by ordering all the transactions in the paradoxical orderings together in the same batch and, thus, ordering them together in the fair-ordered ledger. 
+    % Note that transactions inside a batch can still be totally ordered by a higher-layer compiler; their ordering just won’t be taken into account for unfairness. Also note that, for any pair of transactions $tx$ and $tx'$ that doesn't satisfy the antecedent of the definition of $\gamma-$batch-order-fairness,  this definition doesn't dictate any requirement on their ordering except that a protocol guaranteeing $\gamma-$batch-order-fairness must ensure consistent ordering  between $tx$ and $tx'$ in the transaction ledger of all honest nodes. 
+\end{itemize}
+
+
+
+
+% Leveraging on this, in the next section, we will present protocols for permissionless system that guarantees $\gamma-$batch-order-fairness for ordering of transactions.
+
+
+
+\end{document}

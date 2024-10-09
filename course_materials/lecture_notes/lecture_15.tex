@@ -1,0 +1,398 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{markdown}
+\usepackage{amsthm}
+\usepackage{caption}
+\usepackage{subcaption}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\usepackage{xspace}
+\newcommand{\indicator}{{\bf 1}}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\xw}[1]{{\color{green}
+\footnotesize[Xuechao: #1] }}
+\newcommand{\gerui}[1]{{\color{blue}
+\footnotesize[Gerui: #1] }}
+%\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+%\let\proof\relax
+%\let\endproof\relax 
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 15}
+\cfoot{\thepage}
+
+\newcommand{\bba}{\ensuremath{BBA^*}\xspace}
+\newcommand{\ba}{\ensuremath{BA^*}\xspace}
+\newcommand{\coinfixedtozero}{\text{Coin-Fixed-To-0}\xspace}
+\newcommand{\coinfixedtoone}{\text{Coin-Fixed-To-1}\xspace}
+\newcommand{\coingenuinelyflipped}{\text{Coin-Genuinely-Flipped}\xspace}
+
+
+\title{Lecture 15: Permissionless Blockchains based on BFT Protocols: Algorand }
+\author{Principles of Blockchains, University of Illinois,  \\ Professor:  Pramod Viswanath \\ Scribe:  Gerui Wang}
+\date{March 18, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In the previous lecture, we saw BFT protocols that provide consensus with {\em finality}, i.e., deterministic safety guarantees. However, the protocols we saw (e.g., Hotstuff) were for a fixed number of participants. In this lecture, we study how to use a BFT protocol (such as Hotstuff) in the context of a permissionless blockchain. We pay particular attention to participation determined by PoS, and security against adaptive adversaries. We study  Algorand, a BFT protocol that is very efficient in throughput and latency and  is  especially suited to operation in a permissionless setting via Proof of Stake (PoS), providing resistance against an adaptive adversary. 
+\end{abstract}
+
+
+% \paragraph{Model}
+% Peer-to-peer network with gossiping (for simplicity, perhaps use point-to-point, all-to-all network). Lock-step synchronous, bounded delay of gossiping. Digital signatures and PKI. Hash functions.
+
+% Talks about selecting a committee first, then about player replaceability: change committee each step here (although the above paper doesn't talk about it).
+
+% \section*{Introduction}
+
+% In the previous lectures, we have introduced longest chain style consensus (Nakamoto's longest chain) and classical BFT consensus (HotStuff, Streamlet). In this lecture, we will introduce Algorand, a consensus protocol that is different from these protocols. In Algorand, blocks are generated round by round sequentially, each by a multivalue Byzantine agreement, named \ba. The name Algorand, comes from the usage of algorithmic randomness to select a set of verifiers (known as \emph{committee}) who participates in \ba and are in charge of constructing the blocks. Algorand doesn't use PoW or probabilistic confirmation as Nakamoto does, and it differs from classical BFT consensus in that a committee of players, rather than all players, participate in \ba. The committee selection uses cryptographic sortition and supports {\em player-replaceability}: it can select a new, randomly and independently selected committee not only each round of \ba, but also within each step inside \ba (as in Hotstuff, the \ba requires multiple steps). This mechanism withstands an adaptive adversary who can corrupt all members of a committee, because the next committee is a new one and not affected by the corruption.
+% \subsection*{Algorand's features}
+% \begin{enumerate}
+%     \item \textbf{Adaptive adversary.} Algorand withstands $1/3$ fraction of adaptive Byzantine corruption, where the adversary can instantaneously corrupt any player it wants, at any time it wants.
+%     \item \textbf{Secret cryptographic sortition and secret credentials are used in committee selection.} A random quantity $Q^r$ that is deduced from the previous block $B^{r-1}$ is used to derive a secret credential $\sigma_i$ for player $i$, which determines whether player $i$ is included in a committee. Only player $i$ itself gets to learn the credential and its role (inside the committee or not), hence the adversary cannot corrupt a specific committee member without learning the credential. When player $i$ fulfills its role by sending a message, the credential is attached to the message, so its role becomes publicly known. Now the adversary can corrupt the player immediately, but it will be too late for the adversary to affect this player since its role is already fulfilled and the message is already sent.
+%     \item \textbf{Player-replaceability between rounds and steps.} Since there are multiple round to produce multiple blocks, and protocol \ba is a multi-step protocol, we also require the protocol steps to be player-replaceable: each step can be executed by a totally new set of players. To achieve player-replaceability, we produce new credentials for each step to ensure that the committee for each step is randomly and independently selected. Even if the adversary corrupts previous committees, it won't affect future committees since randomly selected committees will most probably have empty intersection.
+% \end{enumerate}
+
+% For the remaining of this lecture, we will consider binary consensus within  Algorand, and show how it achieves player-replaceability. Then we extend the Algorand consensus to handle multivalues.  We conclude by discussing  how to incorporate PoS and the forensics properties of Algorand. 
+
+\section*{From Permissioned to Permissionless: Committee Selection}
+Consider a very large number $n$ of nodes, but with variable (unknown) participation level, i.e., not all the nodes may be online. This is a bit more constrained than the truly permissionless setting, where $n$ itself is unknown. 
+A simple way to  convert a permissioned BFT protocol to a permissionless one is to simply select a committee of fixed size ($N$) and run a BFT protocol (e.g., HotStuff) to reach consensus on a new block. The randomness of committee election comes from the previous block. Now, as long as 2/3 of this random committee is {\em online and honest}, the BFT protocol is safe and live. Due to the randomness in the committee election, we need to allow some slack in the condition on the   fraction of honest players. For example, we can achieve 2/3 honest supermajority of committee when the honest fraction is 0.7. Given the committee size $N$, the random variable of honest committee member $X$ follows Binomial distribution Binomial($N,0.7$). And figure~\ref{fig:1} shows the probability $P(X> 2N/3)$, and we can see as $N$ grows larger, the probability approaches 1.
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figures/11}
+    \caption{Probability of honest supermajority for fixed committee size $N$.}
+    \label{fig:1}
+\end{figure}
+
+However, it is difficult to elect a  fixed committee size in a distributed verifiable manner.  But it is easy to do a random committee size, using hash functions (like we did in Lecture 12). Each player (honest or malicious) runs a lottery with a small probability of being elected. So now $N$ is also random, but with a fixed expectation. For instance, there are 700K honest players and 300K malicious (Byzantine) players in total, and let $E[N]=1000$. Then the lottery's probability of being elected is 0.001 for every player. And $X$ follows Binomial(700K,0.001) and $Y$ follows Binomial(300K,0.001) ($Y$ is the random variable of malicious committee member).
+
+For a committee with a random size, besides requiring $X> 2E[N]/3$, which ensures that honest players can make progress (liveness), we also need $X+2Y<4E[N]/3$ which ensures the committee has 2/3 honest supermajority (safety). Now, we can re-plot the probability in figure~\ref{fig:2} and we see again that the probability of a random committee leading to a secure BFT protocol approaches 1 rapidly.
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figures/12}
+    \caption{Probability of liveness and honest supermajority for a random committee size $N$. Total players $n=1,000,000$ and honest fraction $0.7$.}
+    \label{fig:2}
+\end{figure}
+
+%Point out that one can simply select a committee of fixed size ($N$) and run BFT (e.g., Hotstuff). This is a simple blockchain (no forking). Draw a figure. Then as long as 2/3 of this committee is online and honest, all is good.  
+
+%Calculate  probabilities of this happening as a function of committee size (law of large numbers), assuming overall 2/3 is honest. Plot the probability as a function of committee size: $P(X > 2N/3)$ as a function of $N$, where $X$ is Binomial($N,2/3$). 
+
+%The trouble is picking fixed committee size in a distributed verifiable manner. But easy to do a random committee size, using hash functions. Come up with a specific mechanism using VRFs So now $N$ is also random  (like we did in lecture 12). Now replot the prob of honest supermajority in committee. %general, don't need to talk about credential
+
+This form of random committee selection is illustrated in figure~\ref{fig:blockchain1}. However, insecurity arises due to vulnerability to adaptive adversaries.  The  vulnerability is of two kinds: (a) the  committee selection is known ahead of time and thus an adaptive adversary can corrupt the committee beforehand;  (b) even within a committee, individual nodes have specific roles in the context of the BFT protocol and can get corrupted during the BFT operation.  
+Algorand addresses both these problems by: (a) novel committee selection that is robust to an  adaptive adversary (using secret credentials);  (b) novel BFT consensus that is robust to adaptive adversary even within substeps of the protocol, as depicted in figure~\ref{fig:blockchain2}. How these are implemented  is the topic of the next two sections. 
+
+\begin{figure}[htb]
+    \centering
+    \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/cs1}
+         \caption{Simple committee}
+         \label{fig:blockchain1}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{figures/cs2}
+         \caption{Algorand}
+         \label{fig:blockchain2}
+     \end{subfigure}
+     \caption{Simple committee selection vs Algorand committee selection}
+    \label{fig:two-blockchain}
+\end{figure}
+
+\section*{Player Replaceability and Secret Committee Election}
+%secret credentials, VRF. 
+
+The existence of an adaptive adversary requires each substep of a BFT protocol to be assigned to a totally new committee, which is independently and randomly selected among all players. This property is called \emph{Player Replaceability}. In addition, since an adversary can corrupt the committee as soon as it knows their identities, we require the committee election to be held \emph{secretly}. In this section, we show how Algorand achieves these requirements.
+
+Suppose the block $B^{r-1}$ associated with round $r-1$'s is available on the blockchain, and we are running a BFT protocol to determine block $B^r$. Assume that we can obtain a random quantity $Q^r$ from the last block $B^{r-1}$, which will be used to generate the randomness. The BFT protocol for block $B^r$ involves multiple steps, and we denote the step counter by $s$. Algorand elects different committees for each step, as seen below. 
+
+In any committee selection stage, player $i$ uses a quantity known as \emph{credential} ($\sigma$)  to secretly determine whether it has been selected. Relying on the random quantity $Q^r$ that is deduced from block $B^{r-1}$ (assuming round $r-1$'s block $B^{r-1}$ available on the blockchain), the credential $\sigma_i^{r,s}$ is a unique signature on $r,s,Q^r$ and if $H(\sigma_i^{r,s})<p$ ($H$ is a hash function, $p$ is a threshold) then player $i$ is selected as a committee member.  The unique secret signature is generated using  VRFs we have introduced in Lecture 12: $VRF(r,s,Q^r,sk_i)<p$ where $sk_i$ is the secret key for VRF. 
+The threshold $p$ is chosen  to have a suitable expected committee size.
+
+When its time to act in step $s$ arrives, $i$ propagates $\sigma_i^{r,s}$ with its message so that other players can verify its inclusion in the committee. Although the adversary may corrupt it, the message cannot be stopped from reaching other honest players. Moreover, the adversary has no more control on the rest of the protocol than he has by corrupting a random player: the committees of all future steps will be randomly and independently selected.
+
+%Let $\kappa$ be the expected committee size and usually we have $\kappa\ll n$. In protocol \bba, we just need to change the quantity $2t+1$ to $t_H\approx 2 \kappa/3$. Since the committee selection is randomized, we need to have some room for quantity $t_H$ and it should be less than the optimal $2 \kappa/3$.
+
+\paragraph{Ephemeral keys.} Although the adversary cannot predict beforehand which users will be in the committee, it would know their identities after seeing their messages, and could then corrupt all of them and oblige them to certify a fake block. To prevent this, players use ephemeral keys: public/secret key pairs that are single-use-only, and once used, are destroyed. Only credentials $\sigma$ are signed by the long-term public/secret key pairs, and any other message is signed by ephemeral key pairs. 
+
+To generate an ephemeral key pair for a player-round-step triple $(i,r,s)$ %such that player $i$ is elected in committee in round $r$, step $s$, 
+player $i$ first generates a master key pair, then it uses the master key pair to generate the ephemeral key pairs for multiple rounds and steps, after which it destroys the master secret key and publicizes the master public key. At round $r$, step $s$, if player $i$ is elected as a committee member, it uses the ephemeral key for $(i,r,s)$ to sign messages, and then destroys the ephemeral secret key. Ephemeral keys are different from the key evolving scheme (KES) we saw in Lecture~12 in that the ephemeral keys are generated by a master key pair, rather than evolving from the previous ephemeral key pair. Since it's very unlikely to be elected as a committee member, a player does not necessarily need to keep keys for every round and step as it does in KES. In this situation, using ephemeral keys is more suitable and more efficient than using KES. 
+
+\section*{Algorand: Single Round BFT Consensus Protocol}
+%BBA, KES, Multiple value BA. Notice that safety is still probabilistic but the guarantees are very very good, so essentially finality. 
+We start with a probabilistic binary BFT consensus protocol that doesn't have player replaceability (but naturally allows its  addition, as we see later).  This protocol targets $n=3t+1$ players and $t$-Byzantine fault tolerance.  Each player $i$ holds a binary value $b_i$ as input, on which they want to reach agreement. During the protocol, they keep updating their local binary value $b_i$.  
+ At the end of the protocol, honest players should output the same value $b$, that is, there is a value $b$ such that $b_i=b$ for all honest player $i$. If all honest players hold the same input, that is, there is a value $b$ such that initially $b_i = b$ for all honest players, then at the end they should output $b$, that is, $b_i = b$ still holds for all honest players.% their binary value $b_i$. 
+
+
+The protocol proceeds in synchronous steps, where messages are guaranteed to be delivered within a step. So the protocol is designed for a {\em synchronous} network, like the longest chain protocol. Each step follows the  paradigm below:
+
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+    Start of a step & End of a step \\
+\hline
+Every player & Every player\\
+    propagates $b_i$ & updates $b_i$ based on the received messages\\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection*{Intuition} 
+
+The key idea in the Algorand protocol lies in the way  \emph{player $i$ updates $b_i$}. 
+Denote $\#_i(v)$ to be  the number of players from which $i$ has received the value $v$,  possibly including $i$ itself.  The  update rule is the following: 
+\begin{quote}
+    If $\#_i(0)\ge 2t+1$, then player $i$ sets $b_i=0$. Symmetrically, if $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+\end{quote}
+The above update rule stipulates that if more than $2t+1$ players hold 0 (or 1), of which $t+1$ must be honest, then player $i$ sets $b_i$ to 0 (or 1). Notice that the two conditions  $\#_i(0)\ge 2t+1$ and  $\#_i(1)\ge 2t+1$ never happens together in one step, since only Byzantine players vote twice and  there are at most $t$ of them.
+
+An obvious issue with the above step is what if  $\#_i(0)< 2t+1$ and  $\#_i(1)< 2t+1$? This condition implies there has not been a $2/3$ majority of a value yet. To deal with this situation, we use a cryptographic primitive called \emph{common coin}. Assume in each step there is a new randomly and independently selected bit $c$ shared with all players (we will show how to implement it later). The usage of the common coin is straightforward: each player sets $b_i=c$ when enough of the players have not had consensus. Hence, the updating of $b_i$ becomes:
+\begin{enumerate}
+    \item If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$.
+    \item Else, if $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+    \item Else, $i$ sets $b_i=c$.
+\end{enumerate}
+The intuition is to run this step  sufficiently many times, say $m=100$ times, and let player $i$ output its local value $b_i$. The following analysis shows that with sufficient iterations of this step, consensus is achieved among honest players with finality. 
+
+\paragraph{Analysis} The core step has the following properties,
+\begin{itemize}
+    \item[(A)] If, at the start of a step, the honest players are in agreement on a bit $b$, (i.e., if $b_i = b$ for all honest player $i$), then they remain in agreement on $b$ by its end.
+    \item[(B)] If the honest players are not in agreement (on any bit) at the start of a step, then with probability $1/2$, they will be in agreement (on some bit) by its end.
+%    \item[(C)] If all honest players started with the same initial binary value $b$ (i.e, if the honest players were originally in agreement on a bit $b$), then they will continue to agree on $b$.
+\end{itemize}
+Property (A) is easy to see since there are at least $2t+1$ honest players and they propagate their agreed values. The explanation for property (B) is that when honest players are not in agreement, they can be in either condition 1 and 3 (sets $b_i=0$ and $b_i=c$) or condition 2 and 3 (sets $b_i=1$ and $b_i=c$). In either case, coin $c$ is equal to the bit with probability $1/2$. Thus, despite initial values, by running this  step $m$ times, honest players will reach an agreement with probability $1-(1/2)^{m}$. However, this is not a consensus protocol, since honest players are not aware whether they are in agreement or not (even after $m$ steps) and when to terminate. The next section constructs a BFT consensus protocol, utilizing this basic step, to  solve this problem.
+
+\subsection*{Consensus on a binary value}
+
+Algorand's binary BFT consensus protocol is an ever-running loop that runs three steps in turn. The protocol is shown in figure~\ref{fig:bba}.  We also use a counter $s$ (starting with $s=1$) to represent how many steps it has executed. So the first step has counter $s=1,4,\ldots$; the second step $s=2,5,\ldots$; and the third step $s=3,6,\ldots$. 
+
+\begin{figure}[thb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/Algorand}
+    \caption{Algorand consensus on a binary value}
+    \label{fig:bba}
+\end{figure}
+The first and second steps in the figure have the aforementioned property (A). They also ensure that, once the agreement has already been reached on some bit, an honest player can learn this is the case, output the bit, and terminate. This is formally described as property (C).
+\begin{itemize}
+    \item[(C)] If, at the first or second step, an honest player $i$ outputs, then agreement will hold at the end of the step.
+\end{itemize}
+As already mentioned, the third step has property (A) and (B). From these properties, we can show that this is a Byzantine consensus protocol. (A) and (C) ensure that no honest player outputs different values, and (A) and (B) ensures that they eventually reach agreement and output a value.
+
+\subsection*{Adding player replaceability and secret committee election}
+To add the committee into the protocol, we give the eligibility to propagate messages to the committee. Notice that updating local value $b_i$ is still done by all players. The communication complexity is $O(nN)$ since each committee member sends messages to all players.
+
+To enable player replaceability and secret committee election, players calculate credentials as introduced in the previous section. Once player $i$ calculates its credential for round $r$, step $s$: $\sigma_{i}^{r,s}$, it learns its role (whether in committee), and can prove its role by appending the credential to its messages in this step. 
+In short, within a step: 
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+    Start of a step & End of a step \\
+\hline
+    \textbf{Committee member} &  \textbf{Every player}\\
+    propagates $b_i$ & updates $b_i$ based on the received messages\\
+    appends credential $\sigma_{i}^{r,s}$ &\\
+\hline
+\end{tabular}
+\end{center}
+
+In the protocol illustrated in Figure~\ref{fig:bba}, we simply need to replace the quantity $2t+1$ by $2 E[N]/3$, since now the random committee has expected size $E[N]$ rather than $n=3t+1$.
+
+\subsection*{Implementing common coin}
+Here we show how to implement the common coin in the third step. The common coin is generated in a separate step where a player  receives messages from many players, denoted by a set $SV$. The player picks the smallest credential hash from $SV$, hashes the credential with the step counter $s$, and uses the least significant bit as the coin $c$. Formally,
+\begin{quote}
+    Letting $SV$ be the set of players from whom it has received a valid message, and letting $l={\arg\min}_{j\in SV} H(\sigma_j)$. $i$ uses $\texttt{lsb}(H(\sigma_j,s))$ as the common coin, where $H$ is a hash function and $\texttt{lsb}$ is the least significant bit.
+\end{quote}
+
+\paragraph{Analysis.} If player $l$ whose credential hash is smallest is honest, then this procedure implements the common coin. Player $l$ is honest with probability $2/3$. Hence, this procedure generates a correct common coin for all players with probability 2/3. Therefore, the property (B) becomes ``with probability $1/3$ (rather than 1/2), honest players will be in agreement''. The protocol terminates within constant steps in expectation.
+
+\subsection*{Multivalue consensus}
+Here we present the intuition on extending binary value to multivalue Algorand consensus. 
+First, we need to elect a leader for each round $r$ who should build and propagate a valid block $B^r$. The ``potential leader'' election is the same as in the committee election, except with a much smaller threshold to elect just a few dozen players as potential leaders. 
+Then (possibly multiple) potential leaders propagate their blocks. Each player chooses the leader whose credential hash is the smallest from potential leaders, and vote for the block hash twice: only when receiving more than $2/3$ first votes should it send the second vote. After these two steps (block proposing and two-round voting), each player either (a) receives a valid block $B^r$ from the leader and enough votes for its hash, or (b) no valid block has enough votes for its hash.
+
+Then, player $i$ starts the binary protocol with initial value $b_i=0$ in condition (a) or $b_i=1$ in condition (b). In the binary protocol, players also attach the block hash to their messages as additional information in condition (a), to make sure they hold the same block. The two-round voting also ensures that if two honest players start with condition (a), then they receive the same block $B^r$. If the binary protocol outputs value 0, it means block $B^r$ (which is known to all players) is finalized. Otherwise, if the output is value 1, it means an empty block $B^r_{\epsilon}$ is finalized.
+
+Notice that the aforementioned block proposing and two-round voting steps are also committee-based and player-replaceable. Therefore, the whole Algorand protocol is committee-based and player-replaceable.
+
+
+\section*{Conclusion}
+
+Putting the steps together, we have Algorand consensus where players agree on block $B^r$ for round $r$. To build the Algorand Blockchain, the consensus protocol is executed round by round to generate block $B^1,B^2,\ldots$ sequentially, where block $B^{r+1}$ contains a hash pointer to parent block $B^r$. Each round has $O(nN)$ communication and terminates in constant expected steps, as shown in previous sections.
+
+We can also turn Algorand into a proof-of-stake (PoS) blockchain, if we involve the stake held by a public key into the committee/leader election (more stake, higher chance to be elected).% then we end up with a PoS and permissionless blockchain. 
+Since there is no forking at all in Algorand,  none of the key grinding and nothing-at-stake attacks that we saw in the longest chain version of PoS (Lecture 12) arise here. So the individual block security of Algorand guarantees security of the whole blockchain. 
+One weakness is that the security of Algorand is under a synchronous network setting, where messages are delivered within a step. 
+
+
+\paragraph{Forensics.} Algorand is designed for $n=3t+1$ players of which $t$ are Byzantine. If the Byzantine players are beyond $t$, they can deviate from the protocol and create a safety violation. Unlike HotStuff or Streamlet, there exists a safety attack that does not leave cryptographic evidence and malicious actors are not held accountable. For instance, in the second step, if all honest players agree on $b=0$ at the start of the step, but more than $1/3$ fraction of players are Byzantine and do not send any vote, then every honest player won't receive $2/3$ fraction of votes for $b = 0$, and they will switch their local value to $b = 1$ by the end of this step. This can result in a safety violation. Nevertheless, since the Byzantine players don't send any message at all, there is no cryptographic evidence to hold them accountable. This statement holds for Algorand with or without committee elections and player replaceability. Whether there is a BFT protocol that is efficient and has player replaceability (so that it can be used as a core consensus engine inside a PoS permissionless blockchain) with strong forensic support is an open question. 
+
+% \section*{Warmup: The Binary BA Protocol \bba}
+% Let us start with a probabilistic binary Byzantine agreement named \bba and not concern about player replaceability for now. This protocol targets $n=3t+1$ players and $t$-Byzantine fault tolerance. Each player $i$ holds a binary value $b_i$ on which they want to reach agreement. The protocol proceeds in synchronous steps, where messages are guaranteed to be delivered within a step. Each step follows this paradigm:
+
+% \begin{center}
+% \begin{tabular}{|c|c|}
+% \hline
+%     Start of a step & End of a step \\
+% \hline
+%     Propagates $b_i$ (including itself)& Updates $b_i$ based on the received messages\\
+% \hline
+% \end{tabular}
+% \end{center}
+
+% \subsection*{A Straw-man Step}
+% Before going to \bba, we wish to show an intuition about \emph{how player $i$ updates $b_i$}. Since the assumption of Byzantine players is $n/3$, it is not hard to have the following idea ($\#_i(v)$ denotes the number of players from which $i$ has received the value $v$):
+% \begin{quote}
+%     If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$. Symmetrically, if $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+% \end{quote}
+% The above step says, if more than $2t+1$ players hold 0 (or 1), of which $t+1$ must be honest, then player $i$ sets $b_i$ to 0 (or 1). Notice that the two conditions  $\#_i(0)\ge 2t+1$ and  $\#_i(1)\ge 2t+1$ never happens together in one step, since there are at most $t$ Byzantine players who vote twice.
+
+% An obvious question with the above step is what if  $\#_i(0)< 2t+1$ and  $\#_i(1)< 2t+1$? This condition means there is not a $2/3$ majority of a value yet. To deal with this situation, we need a cryptographic primitive called \emph{common coin}. Assume in each step there is a new randomly and independently selected bit $c$ magically appears in the sky. (We will show how to implement it later.) The usage of the common coin is straightforward: each player sets $b_i=c$. Hence, the straw-man step becomes:
+% \begin{enumerate}
+%     \item If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$.
+%     \item Else, if $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+%     \item Else, $i$ sets $b_i=c$.
+% \end{enumerate}
+
+% \paragraph{Analysis} This straw-man step has the following properties,
+% \begin{itemize}
+%     \item[(A)] If, at the start of a step, the honest players (at least $2t+1$) are in agreement on a bit $b$, (i.e., if $b_i = b$ for all honest player $i$), then they remain in agreement on $b$ by its end.
+%     \item[(B)] If the honest players are not in agreement (on any bit) at the start of a step, then with probability $1/2$, they will be in agreement (on some bit) by its end.
+% %    \item[(C)] If all honest players started with the same initial binary value $b$ (i.e, if the honest players were originally in agreement on a bit $b$), then they will continue to agree on $b$.
+% \end{itemize}
+% A brief explanation for property (B) is that when honest players are not in agreement, they can be in either condition 1 and 3 (sets $b_i=0$ and $b_i=c$) or condition 2 and 3 (sets $b_i=1$ and $b_i=c$). In either case, coin $c$ is equal to the bit with probability $1/2$. Thus, despite initial values, by running this straw-man step sufficiently many times, honest players will reach an agreement with overwhelming probability.
+
+% \subsection*{3 Steps of \bba}
+% A problem with running the straw-man step a large number of times is that honest players are not aware when they are in agreement and can terminate early. To solve this problem, \bba uses 3 different types of steps, modified from the straw-man step.
+% \begin{itemize}
+%     \item \coinfixedtozero Step. The common coin is replaced by a fixed bit 0.
+%     \item \coinfixedtoone Step. The common coin is replaced by a fixed bit 1.
+%     \item \coingenuinelyflipped Step. The common coin is the genuinely random coin.
+% \end{itemize}
+% As already mentioned, \coingenuinelyflipped step enables reaching agreement with probability $1/2$. The first two steps, \coinfixedtozero and \coinfixedtoone, ensure that, once the agreement has already been reached on some bit, an honest player can learn this is the case, and terminate with the bit.
+
+% We also have the following property of \coinfixedtozero and \coinfixedtoone step.
+% \begin{itemize}
+%     \item[(C)] If, at \coinfixedtozero or \coinfixedtoone step, an honest player $i$ outputs, then agreement will hold at the end of the step.
+% \end{itemize}
+% A brief explanation is, taking \coinfixedtozero as an example, if an honest player $i$ outputs, players can be in either condition 1 or 3, since there are at most $t$ Byzantine players who vote twice so condition 2 is unreachable. Hence, at the end of \coinfixedtozero,  honest players reach agreement on value 0.
+
+% \subsection*{Description of \bba}
+% Protocol \bba is a 3-step loop that consists of \coinfixedtozero, \coinfixedtoone, and \coingenuinelyflipped step. It uses a counter $s$, representing how many steps it has executed. The protocol is shown in Appendix, Table~\ref{tab:bba}. From the aforementioned properties (A), (B), and (C), we can show that \bba is a Byzantine agreement protocol. (A) and (C) ensure that no honest player outputs different values, and (B) ensures that they eventually reach agreement and output a value.
+
+
+% \section*{Player-replaceability: selecting committees using sortition}
+% The advantage of protocol \bba is player-replaceability, that is, each step can be assigned to a totally new committee, which is independently and randomly selected among all players. Given a committee of a step, we change the protocol's paradigm to:
+
+% \begin{center}
+% \begin{tabular}{|c|c|}
+% \hline
+%     Start of a step & End of a step \\
+% \hline
+%     \textbf{Committee member} &  \textbf{Every player}\\
+%     propagates $b_i$ (including itself)& updates $b_i$ based on the received messages\\
+% \hline
+% \end{tabular}
+% \end{center}
+
+% In the committee selection, player $i$ uses a quantity \emph{credential} $\sigma$ to secretly determines whether it is selected. Relying on a random quantity $Q^r$ that is deduced from block $B^{r-1}$ (assuming round $r-1$'s block $B^{r-1}$ available on the blockchain), the credential $\sigma_i^{r,s}$ is the unique signature on $r,s,Q^r$ and if $H(\sigma_i^{r,s})<p$ ($H$ is a hash function, $p$ is a threshold) then player $i$ is selected as a committee member.  \footnote{Or using the VRF output and proof derived from $r,s,Q^r$.}
+% The threshold $p$ should be chosen properly to have a suitable expected committee size.
+% When its time to act in step $s$ arrives, $i$ propagates $\sigma_i^{r,s}$ with its message so that other players can verify its inclusion in the committee. Although the adversary may corrupt it, the message cannot be stopped from reaching other honest players. Moreover, the adversary has no more control on the rest of the protocol than he has by corrupting a random player: the committees of all future steps will be randomly and independently selected.
+
+% Let $\kappa$ be the expected committee size and usually we have $\kappa\ll n$. In protocol \bba, we just need to change the quantity $2t+1$ to $t_H\approx 2 \kappa/3$. Since the committee selection is randomized, we need to have some room for quantity $t_H$ and it should be less than the optimal $2 \kappa/3$.
+
+% \paragraph{Ephemeral keys.} Although the adversary cannot predict beforehand which users will be the committee, it would know their identities after seeing their messages, and could then corrupt all of them and oblige them to certify a fake block. To prevent this, players use ephemeral keys: public/secret key pairs that are single-use-only, and once used, are destroyed. Only credentials $\sigma$ are signed by the long-term public/secret key pairs, and any other message is signed by ephemeral key pairs.
+
+
+
+% \section*{Extending \bba to multi-valued Byzantine agreement \ba}
+% Here we present the intuition on extending \bba to multi-valued Byzantine agreement \ba. For the full protocol \ba, you can refer \cite{chen2019algorand}.
+
+% We need to elect a leader for each round $r$ who should build and propagate a valid block $B^r$. The ``potential leader'' election is the same as committee election, except with a different threshold. Then (possibly multiple) potential leaders propagate their blocks. Each player chooses the leader whose credential hash is the smallest, and vote for the block hash for two rounds. After these block proposing and two-round voting steps, each player either (a) receive a valid block $B^r$ from the leader and enough votes for its hash, or (b) no valid block has enough votes for its hash.
+
+% Player $i$ starts protocol \bba with initial value $b_i=0$ in condition (a) or $b_i=1$ in condition (b). The two-round voting ensures that if two honest players start with $b_i=0$, then they receive the same block $B^r$. If protocol \bba outputs value 0, it means block $B^r$ is finalized. Otherwise, if the output is value 1, it means an empty block $B^r_{\epsilon}$ is finalized.
+% % Classic paper by R. Turpin and B. Coan. (perhaps not related here).
+
+% % Graded consensus in 2019 paper: Algorand: A secure and efficient distributed ledger.
+
+% Notice that the aforementioned block proposing and two-round voting steps are also player-replaceable. Therefore, the whole Algorand protocol is player-replaceable.
+
+% \section*{Proof-of-Stake (PoS)} The Algorand described in this lecture is a permissioned one. If we involve the stake held by a public key into the committee/leader selection (more stake, higher chance to be selected), then we end up with a PoS and permissionless blockchain.
+
+% \section*{Forensics and Accountability} \bba is designed for $n=3t+1$ players of which $t$ are Byzantine. If the Byzantine players are beyond $t$, they can deviate from the protocol and create safety violation. Unlike HotStuff or Streamlet, their misbehavior doesn't leave a cryptographic evidence and they are not held accountable. In \coinfixedtoone step, if all honest players agree on $b=0$ at the start of the step, but more than $1/3$ fraction of players are Byzantine and do not send any vote, then every honest player won't receive $2/3$ fraction of votes for $b = 0$, and they will switch their local value to $b = 1$ by the end of this step. This breaks property (A) and can result in a safety violation. Nevertheless, since the Byzantine players don't send any message at all, there is no cryptographic evidence to hold them accountable.
+
+% \section*{Appendix}
+% \begin{table}[!th]
+%     \caption{Protocol \bba}
+%     \label{tab:bba}
+%     [\coinfixedtozero Step] Each player $i$ propagates $b_i$.
+%     \begin{itemize}
+%         \item[1.1] If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$. Outputs 0 and do not change $b_i$. That is, for future steps, propagates 0.
+%         \item[1.2] If $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+%         \item[1.3] Else, $i$ sets $b_i=0$.
+%     \end{itemize}
+%     [\coinfixedtoone Step] Each player $i$ propagates $b_i$.
+%     \begin{itemize}
+%         \item[2.1] If $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$. Outputs 1 and do not change $b_i$. That is, for future steps, propagates 1.
+%         \item[2.2] If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$.
+%         \item[2.3] Else, $i$ sets $b_i=1$.
+%     \end{itemize}
+%     [\coingenuinelyflipped Step] Each player $i$ propagates $b_i$. %and $\sigma_i$ (the credential of $i$ of this step, used to compute the common coin).
+%     \begin{itemize}
+%         \item[3.1] If $\#_i(0)\ge 2t+1$, then $i$ sets $b_i=0$.
+%         \item[3.2] If $\#_i(1)\ge 2t+1$, then $i$ sets $b_i=1$.
+%         \item[3.3] Else, $i$ sets $b_i$ to the common coin $c$.%letting $SV$ be the set of players from whom it has received a valid message, and letting $l={\arg\min}_{j\in SV} H(\sigma_j)$. $i$ sets $b_i=\texttt{lsb}(H(\sigma_j,s))$, where $H$ is a hash function and $\texttt{lsb}$ is the least significant bit.
+%     \end{itemize}
+% \end{table}
+
+% \subsection*{Implement the common coin}
+% %\gerui{Explain a player's credential $\sigma_i$: its signature on a random quantity $Q_r$ that is from the last block, public visiable to all.}
+% Here we show how to implement the common coin in \coingenuinelyflipped step. In \coingenuinelyflipped step, a player should receives messages from many players, denoted by $SV$. It picks the smallest credential hash from $SV$, hash the credential with the step counter $s$, and use the least significant bit as the coin $c$. Step 3.3 becomes
+% \begin{itemize}
+%     \item[3.3] Else, letting $SV$ be the set of players from whom it has received a valid message, and letting $l={\arg\min}_{j\in SV} H(\sigma_j)$. $i$ sets $b_i=\texttt{lsb}(H(\sigma_j,s))$, where $H$ is a hash function and $\texttt{lsb}$ is the least significant bit.
+% \end{itemize}
+
+% \paragraph{Analysis} If player $l$ whose credential hash is smallest is honest, then this procedure implements the common coin. Player $l$ is honest with probability $2/3$. Hence, the property (B) for \coingenuinelyflipped step is:
+% \begin{itemize}
+%     \item[(B)] If the honest players are not in agreement (on any bit) at the start of a step, then with probability $1/3$, they will be in agreement (on some bit) by its end.
+% \end{itemize}
+
+\nocite{micali2018byzantine}
+\nocite{chen2019algorand}
+\nocite{sheng2020bft}
+\bibliography{references}
+\bibliographystyle{unsrt}
+\end{document}
+
+
+
+
+
+
+
+https://medium.com/xinfin/xinfin-partners-with-stanford-university-for-treehacks-2019-5ca7388b4c4c 
+
+https://www.coindesk.com/r3-corda-now-has-a-bridge-to-public-blockchains-with-arrival-of-ethereum-based-xdc

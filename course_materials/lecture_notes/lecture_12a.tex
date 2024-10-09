@@ -1,0 +1,248 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage[english]{babel}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{makecell}
+\usepackage{threeparttable}
+\usepackage{subfig}
+\usepackage{graphicx}  
+\newsavebox{\measurebox}
+\pagestyle{plain}
+\fancyhf{}
+\usepackage{tabularx} 
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+%\usepackage{hyperref}
+\usepackage{markdown}
+\usepackage{amsthm}
+\usepackage{caption}
+%\usepackage{subcaption}
+
+\newcommand{\indicator}{{\bf 1}}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\xw}[1]{{\color{green}
+\footnotesize[Xuechao: #1] }}
+%\let\proof\relax
+%\let\endproof\relax 
+
+
+
+\newcommand{\POM}{$\mathsf{POM}\ $}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\graphicspath{ {./figures/} }
+\newcommand{\h}{\textsf{H}}
+\newtheorem{lemma}{Lemma}[]
+
+\rhead{Principles of Blockchains}
+\lhead{Lecture 12}
+
+\title{Lecture 12:  Layer 2 Scaling: Side Blockchains}
+\author{
+Principles of Blockchains, Princeton University, \\ 
+Professor: Pramod Viswanath \\ 
+Scribe: Peiyao Sheng\\
+}
+%\date{March 4, 2021}
+\date{\today}
+
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+    So far, we have considered scaling methods that alter the consensus protocol itself (albeit in modest ways). In this lecture, we study how to scale existing blockchain performance {\em without} changing the consensus layer. This is done  by extracting trust from the  consensus embedded in the core blockchain, but offloading computation and storage. Given that the consensus protocol (layer 1) is untouched, these methods are known to afford {\em layer 2} scaling.  In this lecture we study an alternative layer 2 scaling called  {\em side blockchains}; this approach can handle account based systems and smart contracts.
+\end{abstract}
+
+
+
+\section*{Introduction}
+In the last four lectures, we have considered proposals to scale throughput, latency, storage, communication and computation (and energy). In each of these proposals, the longest chain consensus protocol was modified. In a practical blockchain already operating in the real world, it is quite onerous to change the consensus layer: such a change would require a ``meta consensus" among the participating nodes, i.e., consensus on how to change the consensus mechanism! Even a successful switch in the consensus mechanism would still lead to a ``hard fork" in the ledger where the two paths would be following different consensus protocols. In this context, proposals to scale performance without changing the consensus layer are very appealing. Such are the goals of this lecture, where we discuss the two most promising ``layer 2"  proposals that scale performance by offloading computation and storage  without impacting the core technology of blockchains (``layer 1'') and overall security. The  mechanism studied in this lecture is via {\em side chains} and allows a general account based model and smart contract. 
+
+
+\section*{Side Blockchains}
+A side blockchain is a smaller blockchain (in terms of trust represented for example by  the number of nodes or hash power). The side blockchain is connected to a trusted blockchain by having its nodes propose blocks by committing the hashes of the blocks periodically to the trusted blockchain (Fig.\ref{fig:two-layer}). The ordering of blocks in the side blockchain is determined by the order of the hashes in the trusted blockchain; this way the security of the side blockchain is directly derived from that of the trusted blockchain. This mechanism is simple, practical, and efficient -- a single trusted blockchain can cheaply support a large number of side blockchains, because it does not need to store, process, or validate the semantics of the blocks of the side blockchains. Rather, it only orders and records the hashes of these blocks. These side blockchains can remain safe and live even if they do not have honest majority. In many ways, the overall architecture of such a system is similar to that of a uni-consensus based sharded blockchain, which we saw in the previous lecture.
+
+\begin{figure}
+\centering
+\sbox{\measurebox}{%
+    \begin{minipage}[b]{.43\textwidth}
+    \centering
+    \subfloat
+    []
+    {\label{fig:two-layer}\includegraphics[width=\textwidth]{twolayer.pdf}}
+
+    \subfloat
+    []
+    {\label{fig:three-layer}\includegraphics[width=\textwidth]{threelayer.pdf}}
+    \end{minipage} 
+}
+\usebox{\measurebox}
+\begin{minipage}[b][\ht\measurebox]{.51\textwidth}
+  \subfloat
+    []
+    {\label{fig:ACeD}\includegraphics[width=\textwidth]{ACeD.pdf}}
+  \end{minipage}
+\caption{(a) Side blockchains commit the hashes of blocks to a larger trusted blockchain. (b) An oracle layer is introduced to ensure data availability. (c) ACeD is a scalable data availability oracle.}
+\end{figure}  
+
+\paragraph{Data Availability Attack}
+Both the side-blockchain scheme and the sharded blockchain scheme are vulnerable to the \textit{data availability attack}. In this attack, a malicious node in a side blockchain network (or a shard) commits the hash of a block to the trusted blockchain without transmitting the block data to the other nodes. Let us understand why this is a serious problem. When preparing a single ledger out of the blockchain, should users wait until they receive this missing block, or should they skip this block in the ledger they prepare? If they decide to wait, they may be kept waiting indefinitely, leading to a loss of liveness. If instead they move on and prepare the ledger by ignoring the block, the adversary may reveal the block at a later time, at which point it cannot be ignored. The block may contain transactions that are incompatible with the rest of the ledger, causing a safety violation.
+
+The data-availability attack is a well-known attack in the blockchain community, first introduced in the context of \textit{light clients} in blockchains. It was popularized in \href{https://github.com/ethereum/research/wiki/A-note-on-data-availability-and-erasure-coding}{this note} by Vitalik Buterin of Ethereum and an \href{https://arxiv.org/abs/1809.09044}{accompanying paper}. Light nodes merely store the headers of blocks and verify the proof-of-work criterion. They rely on full nodes to validate the block, and to provide a \textit{fraud proof} if the block is invalid. Now consider the following data-availability attack: an adversary publishes a block header but does not publish the block data. A full node would simply ignore such a block until it receives the complete block data (which may never come). Thus, for all purposes, such a block would be an invalid block for a full node. How can a full node convince a light node to also ignore the block? A fraud proof would not be useful here. Rather, the light nodes and full nodes can construct a \textit{data-availability proof} for themselves, a technique described in \href{https://arxiv.org/abs/1809.09044}{this paper}. Such a proof can convince a light node whether or not a block of data is available.
+
+In the context of light nodes, the data-availability attack is not fatal. Typically, miners also run full nodes. If a certain block is unavailable, they simply ignore it and mine in parallel to it (i.e., mine on its parent block). As long as the block remains unavailable, no honest miner will build on it. Eventually, it will fall out of the longest chain. At this stage, light nodes will automatically ignore such a block. In contrast, the attack is more serious in the context of side blockchains and sharding. The crucial difference is that a side blockchain (or a shard) may not have an honest majority of miners/full nodes. Thus, there is no consistent, systematic way for a side blockchain's (or a shard's) participants to decide whether or not to include a missing block in their ledger. A \textit{data availability oracle} is a tool by which nodes in such a system can be ascertain whether or not a block is available. Such an oracle must defend against various kinds of data-availability attacks. The properties that such an oracle must satisfy are given below. Many early techniques designed to protect against the data-availability attack, such as \cite{yu2020coded, al2018fraud} do not provide as strong a security guarantee as an oracle. This is primarily because they were designed to protect light nodes, where strong security properties were not essential; as described, even if the data-availability attack was successful, it would not be fatal. A comparison of the data-availability attack and its solutions for light nodes versus side blockchains is given in Table~\ref{tab:attack}.
+
+\paragraph{Data Availability Oracle}
+A \textit{data availability oracle} is an intermediate layer that accepts blocks from side blockchains, pushes verifiable commitments to the trusted blockchain and ensures data availability to the side blockchains. The oracle layer nodes work together to reach a consensus about whether the proposed block is retrievable (i.e., data is available) and only then commit it to the trusted blockchain.  (Fig.\ref{fig:three-layer}). There are some straightforward constructions of such an oracle.
+\begin{itemize}
+    \item {\em Repetition}: each oracle node keeps a full copy of the block.
+    \item {\em Dispersal}: divide the block into several chunks and evenly disperse the chunks to oracle nodes. each node keeps a part of the block.
+\end{itemize}
+{\em Repetition} can simply conduct a voting to decide on the majority result, however the communication and storage overhead is proportional to the number of oracle nodes. If the number of oracle nodes is small (and yet deemed trustworthy), this is a very feasible approach. In a true decentralized sense this approach is not scalable. {\em Dispersal} minimizes the redundancy of data, but is not secure since even one malicious oracle node can violate the retrievability. So a trade-off between security and scalability is spotted here and the key challenge is how to securely and efficiently share the data amongst the oracle nodes to verify data availability.
+
+\begin{table}[]
+\centering
+\caption{Data availability attack in two scenarios.}
+\label{tab:attack}
+\begin{tabular}{|l|l|}
+\hline
+\multicolumn{1}{|c|}{Bitcoin light nodes}                                                        & \multicolumn{1}{c|}{Sidechain clients} \\ \hline
+Light nodes random sample chunks                                                                 & Oracle nodes store dispersed data      \\ \hline
+\begin{tabular}[c]{@{}l@{}}Rely on one honest full node to \\ reconstruct the block\end{tabular} & Any client can reconstruct the block   \\ \hline
+\begin{tabular}[c]{@{}l@{}}Probabilistic secure: need enough \\ light nodes to ensure reconstruction\end{tabular} &
+  \begin{tabular}[c]{@{}l@{}}Deterministic secure: specific protocol \\ to guarantee reconstruction\end{tabular} \\ \hline
+\end{tabular}%
+
+\end{table}
+
+\paragraph{Erasure Coding}
+To design a scalable oracle, we introduce the use of erasure coding. The dispersal protocol can not tolerate even one malicious node hiding one data chunk of the block, but by adding redundancy to the block through appropriate erasure codes\cite{lin2001error}, any $1-\alpha$ fraction of the data chunks are enough to reconstruct the entire block, where $\alpha$ is undecodable ratio determined by a pair of erasure code and decoding algorithm, which is the least fraction of data adversary needs to hide to make the block undecodable.  
+
+For example, an $(n,k)$ Reed-Solomon (1D-RS) code\cite{reed1960polynomial} evenly partitions a block $B$ of $b$ bytes into $k$ data symbols of $b/k$ bytes each as $B=[m_1,\cdots,m_k]$, and linearly combines them to generate a coded block with $n$ coded symbols, $C = [c_1, \dots, c_n]$. If the undecodable ratio $\alpha = 1/3$, and there are $n$ oracle nodes and each of them is assigned with one coded symbol to store, then any subset of $2/3$ coded symbols in $C$ is enough to reconstruct the entire coded block.
+
+\paragraph{Coding integrity and correctness} Intuitively, one can use a Merkle tree to provide proof of inclusion for any coded symbol. But a malicious block producer can construct a Merkle tree of a bunch of nonsense symbols so that no one can successfully reconstruct the block; this is the so-called {\em incorrect-coding} attack. An approach to detect such attacks is via an {\em incorrect-coding proof} (also called ``fraud proof"), which contains symbols that fail the parity check and can be provided by any node who tries to reconstruct the data.  The size of the proof determines the efficiency of the fraud proof method. We find that the fraud proof of 1D-RS contains $k$ coded symbols, essentially not much better than downloading the original block ($n$ symbols). To reduce the size of the fraud proof, 2D-RS \cite{al2018fraud} places a block into a $(\sqrt{k}, \sqrt{k})$ matrix and apply $(\sqrt{n},\sqrt{k})$ Reed-Solomon code on all columns and rows to generate $n^2$ coded symbols; 2D-RS reduces the fraud proof size to $O(\sqrt{b}\log b)$ if we assume symbol size is constant. Further, a cryptographic hash accumulator called Coded Merkle Tree (CMT) \cite{yu2020coded} is proposed and reduces the proof size to $O(\log b)$. However, note that CMT is designed for light nodes to randomly sample coded symbols for data availability check, it provides probabilistic security and thus can not solve the oracle problem for side blockchains.
+
+\subsection*{ACeD}  \href{https://arxiv.org/abs/2011.00102}{Authenticated Coded Dispersal} (ACeD) is a recent work that proposes a scalable solution to the data availability oracle problem. The performance comparison between ACeD and other solutions is in Table~\ref{tab:comparison}. There are four core components in ACeD, as depicted in Figure~\ref{fig:ACeD}. 
+     \begin{itemize}
+         \item A coded commitment generator called {\em Coded Interleaving Tree}  (CIT), which is constructed layer by layer in an interleaved manner embedded with erasure codes. The interleaving property avoids downloading extra proof and thus minimizes the number of symbols needed to store. 
+         \item A pair of dispersal and retrieval protocol are designed to disperse tree chunks among the network with the least redundancy and ensure the retrievability of all data. 
+         \item A hash-aware peeling decoder is used to achieve linear decoding complexity. The fraud proof is minimized to a single parity equation.
+     \end{itemize}
+
+
+\begin{table}[]
+\centering
+\caption{Performance metrics for different data availability oracles ($N$: number of oracle nodes, $b$: block size).}
+\begin{threeparttable}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{|l|l|c|c|c|c|c|}
+\hline
+\multirow{3}{*}{}    & maximal   & \multicolumn{2}{c|}{normal case}                              & \multicolumn{2}{c|}{worst case}                               & \multirow{3}{*}{\begin{tabular}[c]{@{}c@{}}communication \\ complexity\end{tabular}} \\ \cline{3-6}
+                     & adversary & storage                       & download                      & storage                       & download                      &                                                                                      \\
+                     & fraction  & \multicolumn{1}{l|}{overhead} & \multicolumn{1}{l|}{overhead} & \multicolumn{1}{l|}{overhead} & \multicolumn{1}{l|}{overhead} &                                                                                      \\ \hline
+uncoded (repetition) & 1/2       & $O(N)$                        & $O(1)$                        & $O(N)$                        & $O(1)$                        & $O(Nb)$                                                                              \\ \hline
+uncoded (dispersal)  & 1/N       & $O(1)$                        & $O(1)$                        & $O(1)$                        & $O(1)$                        & $O(b)$                                                                               \\ \hline
+1D-RS                & 1/2       & $O(1)$                        & $O(1)$                        & $O(b)$                        & $O(b)$                        & $O(b)$                                                                               \\ \hline
+2D-RS \cite{al2018fraud}                & 1/2       &     $O(1)$                    &     $O(1)$                      &          $O(\sqrt{b}\log b)$      &          $O(\sqrt{b}\log b)$                 &      $O(b)$                                                                        \\ \hline
+ACeD                 & 1/2       & $O(1)$                        & $O(1)$                        & $O(\log b)$                   & $O(\log b)$                   & $O(b)$                                                                          \\ \hline
+\end{tabular}}
+
+\end{threeparttable}
+
+\label{tab:comparison}
+\end{table}
+%why download efficient for ACeD be log n? I thought it is only a constant fraction of block like gamma b .
+\begin{table}
+\centering
+\caption{System Performance Metrics}
+\label{tab:metrics}
+\renewcommand{\tabularxcolumn}{m} 
+\resizebox{\textwidth}{!}{
+\begin{tabularx}{\textwidth}{|c|c|>{\raggedright}X|}
+\hline
+\textbf{Metric} & \textbf{Formula}&\textbf{Explanation} \tabularnewline
+\hline
+Maximal adversary fraction & $\beta$ & The maximum number of adversaries is $\beta N$.
+\tabularnewline
+\hline
+Storage overhead & $D_{\text{store}} / D_{\text{info}}$& The ratio of total storage used and total information stored.
+ \tabularnewline
+\hline
+Download overhead & $D_{\text{download}}/D_{\text{data}}$ & The ratio of the size of downloaded data and the size of reconstructed data.
+\tabularnewline
+\hline
+Communication complexity &$D_{\text{msg}} $ &Total number of bits communicated.
+\tabularnewline
+\hline
+\end{tabularx}}
+\end{table}
+
+
+
+\paragraph{Coded Interleaving Tree} CIT is as efficient as CMT on the fraud proof size due to the similar tree structure, but with an entirely different set of construction rules. Specifically, CMT uses a {\em pull model} to randomly sample symbols via an anonymous network, thus is applicable only to light nodes. In contrast, CIT is designed to support a secure deterministic dispersal with a {\em push model}, there is no anonymity assumption, and  is designed to be incentive compatible.
+
+The construction rules of CIT are best seen in stages.  
+CIT takes a block proposed by a client as an input and creates three outputs: a commitment, a sequence of coded symbols, and their proof of membership $\mathsf{POM}$. The commitment is the root of CIT, the coded symbols are the leaves of CIT in the base layer, and \POM for a symbol includes the Merkle proof (all siblings' hashes from each layer) and a set of parity symbols from all intermediate layers. 
+
+The construction process of an example CIT is illustrated in figure \ref{fig:tree}. Suppose a block has size $b$ bytes, and its CIT has $\ell$ layers. The first step to construct the CIT is to divide the block evenly into small chunks, each is called a data symbol. The size of a data symbol is denoted as $c$, so there are $s_{\ell} = b/c$ data symbols. And we apply erasure codes with coding ratio $r \le 1$ to generate $m_{\ell} =s_\ell/r$  coded symbols in the base layer. Then by aggregating the hashes of every $q$ coded symbols we get $m_{\ell}/q$ data symbols for its parent layer (layer $\ell-1$), which can be further encoded to $m_{\ell-1} = m_\ell/(qr)$ coded symbols. We aggregate and code the symbols iteratively until the number of symbols in a layer decays to $t$, which is the size of the root.
+
+
+\begin{figure}[hbt]
+    \centering
+    \includegraphics[width=0.85\textwidth]{CIT.png}
+    \caption{(1) CIT construction process of a block with $s_{\ell} = 8$ data symbols, applied with erasure codes of coding ratio $r = \frac{1}{4}$. The batch size $q = 8$ and the number of hashes in root is $t=4$. (2) Circled symbols constitute the 15th base layer coded symbol and its $\mathsf{POM}$. The solidly circled symbols are the base layer coded symbol and its Merkle proof (intermediate data symbols), the symbols circled in dash are parity symbols sampled deterministically.}
+    \label{fig:tree}
+\end{figure}
+
+For all layers $j$ except for root, $1\le j \le \ell$, denote the set of all $m_j$ coded symbols as $M_j$, which contains two disjoint subsets of symbols: data symbols $S_j$ and parity symbols $P_j$. The number of data symbols is $s_j = r m_j$. Specifically, we set $S_j = [0, rm_j)$ and $P_j=[rm_j, m_j)$. Given a block of $s_{\ell}$ data symbols in the base layer, the aggregation rule for the $k$-th data symbol in layer $j-1$ is defined as follows:
+\begin{equation}
+  Q_{j-1}[k] = \{ \h(M_{j}[x])\ |\ x \in [0,M_{j}), k = x \bmod rm_{j-1} \} 
+\end{equation}
+\begin{equation}
+M_{j-1}[k] = \h(\mathsf{concat}(Q_{j-1}[k]))
+\end{equation}
+where $1\le j \le \ell$ and $\h$ is a hash function. $Q[k]$ is the tuple of hashes that will be used to generate $k$-th symbol in the parent layer and \textsf{concat} represents the string concatenation function which will concatenate all elements in an input tuple.
+
+Generating a \POM for a base layer symbol can be considered as a layer by layer sampling process as captured by the following functions:
+\begin{equation*}
+	f_{\ell}: [m_{\ell}] \to {m_{\ell-1} \choose 2}, \cdots,  f_{2}: [m_{\ell}] \to {m_{1} \choose 2};
+\end{equation*}
+Each function maps a base layer symbol to two symbols of the specified layer: one is a systematic symbol and the other is a parity symbol. 
+We denote the two symbols with a tuple of functions $f_j(i) = (p_j(i), e_j(i))$, where $p_j(i)$ is the sampled systematic symbol and $e_j(i)$ is the sampled parity symbol, each is defined as follows:
+
+\begin{equation}
+\label{eq:pe}
+    p_{j}(i) = i \bmod rm_{j-1}  ; \;\; e_{j}(i) = rm_{j-1}  + (i \bmod (1-r) m_{j-1})
+\end{equation}
+where $p_{j}: [m_{\ell}] \to [0, rm_{j-1})$ and $e_{j}: [m_{\ell}] \to [rm_{j-1}, m_{j-1})$. Note that the sampled non-base layer systematic symbols are automatically the Merkle proof for both systematic and parity symbols in the lower layer.
+
+There are two important properties of CIT. (1) It guarantees that if at least $\eta\le 1$ ratio of distinct base layer symbols along with their \POM are sampled, then in every intermediate layer, at least $\eta$ ratio of distinct symbols are already picked out by the collected $\mathsf{POM}$. It ensures the reconstruction of each layer of CIT. % (Lemma~\ref{lm:recon}, {\em reconstruction} property). 
+(2) All sampled symbols at each layer have a common parent, %(Lemma~\ref{lm:sibl}, {\em sibling} property), 
+which ensures the space efficiency of sampling.
+
+%\begin{lemma} 
+%\label{lm:recon}
+%(Reconstruction) For any subset of base layer symbols $W_\ell$, denote $W_j := \bigcup_{i\in W_\ell}f_j(i)$ as the set of symbols contained in \POM of all symbols in $W_\ell$. If $|W_\ell|\ge \eta m_\ell$, then $\forall j\in[1,\ell]$, $|W_j|\ge \eta m_j$.
+%\end{lemma}
+
+
+%\begin{lemma}
+%\label{lm:sibl}
+%For any functions  $p_j(i)$ and $e_j(i)$ defined in equation \ref{eq:pe}, where $1\le j\le \ell$, $0\le i< m_{\ell}$, $p_j(i)$ and $e_j(i)$ are siblings.
+%\end{lemma}
+
+%%\section*{Summary}
+%This lecture we discuss external scaling methods, including payment channels and side blockchains. They are both layer 2 scaling -- built directly on top of an existing blockchain infrastructure as layer 1 to improve the performance. Payment channel has high throughput, low latency and cost. But it requires nodes to stay online, and its computations are closely tied to the original blockchain. Side blockchain utilizes some smaller independent blockchains to store data and execute computation, but is vulnerable to data availability attack. We further introduce an data availability oracle layer to solve the problem and demonstrate a scalable solution ACeD run by a group of permissioned nodes to provide an interoperability service across blockchains.
+
+
+\bibliographystyle{plain}
+\bibliography{bibfile}
+
+\end{document}

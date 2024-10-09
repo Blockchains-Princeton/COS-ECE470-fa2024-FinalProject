@@ -1,0 +1,154 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{markdown}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 5}
+\cfoot{\thepage}
+
+\title{Lecture 5:  Bitcoin System-Putting it All Together}
+\author{Principles of Blockchains, Princeton University,  \\ Professor:  Pramod Viswanath \\ Scribes: Suryanarayana Sankagiri and Xuechao Wang}
+%\date{February 9, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In this lecture, we cover some aspects regarding transactions in Bitcoin. Transactions give semantic meaning to the decentralized ledger enabled by a blockchain. We discuss how Bitcoin gets its monetary value and how money is transferred from one user to another. We highlight the different safety checks that users can perform to prevent any form of cheating. This leads to the notion of validating a block. We argue that validating blocks is a storage and computation intensive process. and show how Bitcoin can support light clients that perform a limited extent of validation. Finally, we take a high-level view and discuss how a blockchain can act as a distributed computer, running arbitrary programs termed as smart contracts.
+\end{abstract}
+
+\section*{Introduction} 
+In any currency/banking system, there are some basic requirements that the system must provide for. We list them here:
+\begin{enumerate}
+    \item There should be a unit of currency/money.
+    \item There should be a standard way of keeping accounts, i.e., keeping track of how much money each person owns, and transferring money between accounts. 
+    \item No user should be able to create new money from thin air. Put differently, there should be a fixed amount of money in the system at any given time, and new money should be introduced in a systematic manner.
+    \item A user should not be able to spend more money than he/she owns. There should be a way to verify whether or not this happens.
+    \item One user should not be able to spend someone else's money (at least, not without their permission).
+\end{enumerate}
+Let us see how the Bitcoin system provides these features.
+
+\section*{Bitcoin and Satoshi}
+The basic unit of currency in the Bitcoin system is, simply, Bitcoin. The smallest denomination of a Bitcoin is called a Satoshi. It is equal to $10^{-8}$ Bitcoins. All transactions must be some integer multiple of a Satoshi. Just as all other currencies in the world have exchange rates, there is an exchange-rate between Bitcoin and the dollar. As of today, February 9 2021, one Bitcoin is worth $48,000$ US dollars. Due to various factors (including greed and speculation), the exchange rate between Bitcoin and dollars is very volatile. Whether Bitcoin should be thought of as a currency (like the US Dollar) or a store of value (like the precious metal, gold) has been debated widely; the mainstream view is that Bitcoin is a combination of both. Economically valuing Bitcoin, both in the short and long terms, is an active area of research. In this lecture we will see aspects of the Bitcoin system that helps understand the economic aspects of Bitcoin, both as a currency and a store of value. 
+
+\section*{Transactions}
+In ordinary parlance, the term \textbf{transaction} refers to an exchange of something of value. In the context of Bitcoin and cryptocurrencies, a transaction is simply a message that specifies the transfer of money from one entity to another. In fact, transactions are the data-values that get recorded on the blockchain. The blockchain as a ledger is therefore an ordered list of transactions. From this publicly verifiable ledger, any user can detect whether transactions are made according to certain rules or not, thereby lending credibility to the ledger and the currency.
+
+In Bitcoins, transactions have a well-defined structure, which we elaborate upon below. One can take a look at the structure of real Bitcoin transactions \href{https://www.blockchain.com/explorer}{here}.
+
+\paragraph{Addresses}
+Naively, in a currency system, there should be some notion of an account; a transaction notes the transfer of money from one account to another. In Bitcoin, the notion of accounts is replaced with that of \textit{addresses}. Bitcoins are allocated to addresses, and these addresses are also used to decide where Bitcoins will be sent to, in a transaction. What exactly is an address and how is one generated? In Bitcoin, an address is simply the hash of a public key. Recall the notion of digital signatures, and that of public and private keys. New pairs of keys, and thus new addresses can be generated at will by a single user.
+
+One idiosyncrasy of Bitcoin is the following. In order to receive coins, a user needs to only publish its address, not its public key. However, to spend coins, a user must also reveal its public key. This is explained below.
+
+\paragraph{Transaction inputs and outputs}
+A transaction in a Bitcoin is a statement that records a transfer of money from one address to another. More broadly, a transaction records a transfer of money from one set of addresses to another. Every transaction has a set of \textit{transaction inputs} and \textit{transaction outputs}. Each transaction input states the amount of Bitcoin being spent by a particular address. Each transaction output states the amount of Bitcoin being received by a particular address. In a transaction, the total money being spent should add up to the total money being received. %We shall see the reason for allowing multiple transaction inputs and outputs shortly.
+
+\paragraph{Signatures on transactions}
+Each transaction must be signed by all the users that are spending money. This is a basic safety feature that prevents others from spending one's money without authorization. As mentioned above, each address has a one-to-one correspondence with a public key, which in turn has a one-to-one correspondence with a private key. A user that wishes to spend Bitcoins associated with a particular address creates a transaction appropriately, and then signs the transaction using the corresponding private key. It then broadcasts the transaction along with the corresponding public key. Anyone who that sees a signed transaction can verify whether it was signed by the person owning the address (and thereby, the coins in the address). Thus, signatures help other users validate transactions. More generally, if a transaction spends Bitcoins from multiple addresses, there must be signatures corresponding to each of these addresses.
+
+\paragraph{UTXOs} So far, we have seen how transactions are used to transfer money from one address to another. What prevents a user (i.e., an address) from spending more money than it has? One method would be to keeping track of the balance of each address, adding or deducting its value as money is received/spent from the address. Bitcoin adopts a different approach; here, every transaction input must be a transaction output of an earlier transaction. Linking transaction inputs to past inputs provides a proof that the address indeed has sufficient money to spend. 
+
+When a new transaction output is created, we say that it is \textit{unspent}. At some time in the future, it gets consumed as part of transaction input, at which point it is \textit{spent}. A valid transaction must only include \textit{unspent transaction outputs} (UTXOs) as its inputs. While honest users will always ensure this, a dishonest user can try to \textit{double-spend} its money. In order to prevent this, honest users must keep track of the set of UTXOs at all times, and must validate every new transaction in the blockchain against this set. We elaborate more on this in later sections. The above method of validating transactions is called the \textbf{UTXO model}. A more natural technique would be the \textbf{account-based model}, where the balance is maintained for each address. This latter model is adopted in other cryptocurrencies such as Ethereum (and also in regular banks).
+
+We now see why a Bitcoin transaction allows for multiple transaction inputs and outputs. First, let us consider the need for multiple outputs. Suppose a particular user owns a single Bitcoin address, to which it has received 2 Bitcoins in a particular transaction. Even if it wants to spend a fraction of that money (say, 1 Bitcoin), it must spend the only UTXO it has, which is of 2 Bitcoins. In such a case, it creates two transaction outputs, one to the address it actually wants to send the money to, and the other to itself (the change). The latter output could be to the original address, or to a new address. Next, let us consider the case of multiple inputs. Suppose an address (i.e., user) has received 1 Bitcoin each in two different transactions, and it would now like to pay 2 Bitcoins to another address. It can then include two transaction inputs in a single transaction in order to pay this amount.
+
+\paragraph{Cryptocurrency wallets} In reality, keeping track of UTXOs, and measuring them up for each transaction is difficult. In addition, a single user ought to spawn new addresses regularly, for the sake of maintaining anonymity. These addresses (and the corresponding keys) must be generated carefully, without revealing even a hint of the private key. Further, they must be stored securely. All these functionalities are taken care of by a \textit{cryptocurrency wallet}. Wallets are simply software that perform a lot of these tasks in the back-end, allowing users to transact in Bitcoin as one would using a bank account. Using a wallet requires trusting the software of the wallet. In principle, one can participate in the cryptocurrency system without the use of a wallet, but most users use a wallet.
+
+\paragraph{Transaction fees} We mentioned above that the total value in a transaction's inputs must add up to the total value in its outputs. In reality, the sum of values in the output is slightly lower than the inputs. The remaining amount, called the \textbf{transaction fees}, is claimed by the miner of the block that includes this transaction. The transaction fees are an incentive for a miner to include a particular transaction in the block being mined. Transactions with higher fees get included faster in the blockchain, while those with lower fees get added later. The fees vary with time, and are often calculated automatically by wallets according to a  particular fee rate, measured in Satoshi per kilobyte. You can learn more about transaction fees and fee rates  \href{https://en.bitcoin.it/wiki/Miner_fees}{here}. Roughly speaking, fees are of the order of ten dollars per transaction.
+
+\paragraph*{Coinbase transactions}
+The preceding discussion is on how money is exchanged by users in the Bitcoin system. How is money introduced in the system in the first place? The answer is simple: new Bitcoins are generated with every new block. Every block includes a special transaction, called the coin-base transaction, in which the miner gets for itself a fixed number of Bitcoins. Initially, the rewards were $50$ BTC per block. Every $210,000$ blocks mined, or about every four years, the reward given to Bitcoin miners for processing transactions is cut in half. So far, there have been three halvings, and the current reward is $6.25$ BTC per block. Block rewards will continue till the year $2140$, after which there will be no new Bitcoin introduced in the system. The total volume of currency that will be ever be used is capped at $21$ million, of which around $18.5$ million coins are already in circulation. Coinbase transactions, along with transaction fees, are an additional incentive mechanism for Bitcoin users to actively participate by mining. In the initial years of Bitcoin, coinbase transactions formed the major component of the rewards; with time, the contribution of transaction fees is catching up. 
+
+Figure \ref{fig:bitcoin_halving} shows how the Bitcoin block reward decreases by half every four years. We are currently at 6.25 Bitcoins per block. The figure also shows the total number of Bitcoins in circulations. The halving scheme ensures that the total number of Bitcoins ever produced will taper off to a total of $21$ million Bitcoins.
+
+Figure \ref{fig:block_rewards} shows the same metric as in Figure \ref{fig:bitcoin_halving}, but the reward is now measured in dollars instead of Bitcoin. This figure is useful to understand the incentives for mining. The block rewards (along with the transaction rewards) must offset the cost of mining. As more users join the system with time, a particular miner must compute more hashes (and thus must spend more on electricity) to mine a block. Block rewards (in terms of dollars) have gone up too, providing an incentive for users to mine in spite of the increasing difficulty. There is a subtle balance between the various economic factors that govern the level of mining power in the Bitcoin system.
+\begin{figure}[p]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/bitcoin_halving.png}
+    \caption{Bitcoin block reward in bitcoins. Figure sourced from \href{https://www.coindesk.com/bitcoin-halving-explainer}{here}}
+    \label{fig:bitcoin_halving}
+\end{figure}
+
+\begin{figure}[p]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/block_reward.jpg}
+    \caption{Bitcoin block reward in dollars. Figure sourced from \href{https://www.cmcmarkets.com/en/learn-cryptocurrencies/bitcoin-halving}{here}}
+    \label{fig:block_rewards}
+\end{figure}
+
+%\pramod{please put a figure of how bitcoin's block reward scheme changes over time. give some numbers as examples.}
+
+\paragraph*{Transaction mempool}
+Whenever one user wants to pay another using Bitcoin, it generates an appropriate transaction, signs it, and broadcasts it through the entire network. Ultimately, the transaction is simply a message (a string of bits) in a particular semantic form. The size of a message is  a few kilobytes; the exact size depends on the number of transaction inputs and outputs. The transaction is propagated across the Bitcoin network using the diffusion protocol. Miners keep looking out for new transactions and add them to their memory, called the \textbf{mempool} (they do so after verifying the signature on the transaction). At any given point in time, a miner is working on a particular block, which contains some transactions from its mempool. A miner can include new transactions from its mempool into its working block at will (or even remove them). As such, it would like to include as many transactions as possible in order to maximize its sum total transaction rewards. However, there is an upper bound on the total size of a block. Thus, a miner prioritizes blocks with a higher transaction fee rate, i.e., a higher fee with a smaller size. A transaction with a high enough transaction fee is included immediately by all miners into their working block. The lucky miner who finds the proof-of-work first gets to ``claim" the reward; again the claim on the reward is only honored when the block is confirmed, i.e., buried deep enough in the longest chain. 
+
+Note that there is a certain latency between the transaction first being issued and the transaction being confirmed on the blockchain. The first factor behind the latency is that it takes time for a newly issued transaction to be included in any block; this latency can be reduced by increasing the mining fee. The second factor is that it takes time for a block that includes the transaction to be buried deep enough. Here, a user may trade-off latency with security (in Bitcoin). Other blockchain designs, which we explore in future lectures, may not have this trade-off.
+
+\section*{Validating a block}
+
+\paragraph{The state of the system} In the above discussion, we covered many important points explaining how Bitcoin enables a money-exchange system. One issue that was skirted is, how do users verify that a single coin is not spent twice? In the context of Bitcoin, this issue boils down to verifying that a transaction's inputs have not been spent already. As such, the only way to verify this is to keep track of the set of UTXOs (unspent transaction outputs) at all times. This set is often referred to as the \textbf{state} of the system. Note that these outputs are for those transactions that are already in the blockchain, and have not been spent in the blockchain. Thus, the state changes  every time the longest-chain grows (or more generally, changes). It is important to note that the state is separate from the mempool, but is linked in the following way. Honest users build a block from transactions in the mempool. However, they only choose those transactions that are valid, and they check the validity using the information in the state. In an account-based model, the state would simply be the roster of all account balances. More generally, the state of a blockchain system contains a summary of all the entries in the ledger thus far, which can be used to validate new entries. 
+
+Figure \ref{fig:utxo_size} shows the number of UTXOs in the Bitcoin system as a function of time. Clearly, it has grown many-fold since the beginning, and it will continue to grow as Bitcoin becomes more popular. With each UTXO being a few hundred bytes, the size of the UTXO set is now over $5$ GB. As such, this might seem like a moderate amount which can be easily stored. However, each node must perform many read, write and delete operations on this set. Thus, the set must be stored in the memory (preferably, on-chip memory) rather than on the disk. Given this requirement, the UTXO size is too large for regular devices to store; it requires specialized hardware. The large UTXO size is another dimension of the scalability challenge. %\pramod{point out that this growing in size over time. give some numbers to get an idea of the current size. }
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width = 0.8\textwidth]{figures/UTXO_size.png}
+    \caption{Number of UTXOs over time in Bitcoin. Figure sourced from \href{https://www.blockchain.com/charts/utxo-count}{here}}
+    \label{fig:utxo_size}
+\end{figure}
+
+\paragraph{Validating blocks} When a miner receives a new block, it must perform certain sanity checks, of which two are important. First, it checks whether the proof-of-work meets the required threshold. Second, it checks whether the transactions in the block are consistent with the state. This means that it must check whether every input in every transaction belongs to the state or not. If it does, the miner accepts the block, removes the relevant transactions from its mempool, and also updates the state. Updating the state involves deleting spent transaction outputs and adding the newly generated ones. While constructing a new block to mine on, the same validation steps are taken preemptively.
+
+\paragraph{Light nodes and stateless clients}
+Storing the state of the system and validating each transaction in every block requires storage and computation power. Bitcoin allows for light nodes/clients, who can participate in the system with much lesser computation and storage power. A light client merely verifies the proof of work on blocks. It may further selectively verify the validity of transactions, especially those that concern itself. As such, a light client does not store the state of the system which prevents it from validating transactions.
+
+There are proposals to augment the functionality of light nodes, by creating so-called \textbf{stateless nodes}. These nodes can validate transactions/blocks without storing the full state at all times. They merely download the requisite state information to validate a block, one block at a time, and then delete it once the block is validated. In order to do so securely, the state is stored in the form of an accumulator, which we discussed in Lecture 2. The stateless client option is being pursued vigorously by Ethereum. See, e.g., the discussion \href{https://ethresear.ch/t/the-stateless-client-concept/172}{here}. A fully functional stateless client for Bitcoin, which makes use of Merkle tree accumulators, has been built by the \href{https://www.media.mit.edu/projects/utreexo/overview/}{UTREEXO project}.
+
+\section*{Smart contracts}
+So far, we have seen how blockchains can be used to implement a currency system. Essentially, the blockchain as a ledger records payments from one party to another, thereby keeping tab of all parties' balances. Transactions are simply messages recording the transfer of money. However, blockchains are much more versatile; they can also be used to run \textit{smart contracts}. Smart contracts are programs that are run by the peers in the blockchain system. The notion of a transaction is broadened to include these pieces of code as well. Smart contracts come into play when two parties want to exchange money subject to some terms and conditions. In the physical world, they would draw up a contract. A trusted third party/authority would be needed to ensure that both parties follow the contract. When run on a blockchain, smart contracts eliminate the need for a single trusted third-party. Instead, the decentralized trust of the blockchain (in other words, the honest majority of the system) ensures that the contract gets executed correctly.
+
+In this lecture, we only focus on smart contracts in Bitcoin, which are rather limited in scope. Ethereum, a subsequent cryptocurrency, allows for much more diverse programs as smart contracts; we will learn about that in a later lecture.
+
+\paragraph{Scripts in Bitcoin}
+Smart contracts are simply called scripts in Bitcoin. To understand scripts, we need to broaden our understanding of transactions from merely statements recording the transfer of money. As we saw before, a transaction consists of inputs and outputs, with outputs recording the transfer of Bitcoins to some address. What we did not mention before is that every transaction output includes a script, consisting of \textit{opcodes}, which specify conditions that must be satisfied in order to spend the coins mentioned in the output. The default condition is that the spender of the output must provide a public key that hashes to the pertinent address, and must sign the message with the corresponding private key. Earlier, we presented this as a sanity check; however, this is explicitly specified as a script in every regular transaction.
+
+Bitcoin scripts also allow for additional conditions, such as requiring that the transaction is not spent until a particular time, requiring that a transaction is spent by a particular time, requiring a message that is signed by multiple private keys, etc.
+An interesting and useful script that emerges from a combination of these conditions is that of a hashed timelock contract (HTLC). HTLCs are useful in setting up escrow funds. If Alice wants to pay Bob in exchange for some other good, then Alice would like to pay Bob only after she is guaranteed to get the good from Bob, and Bob would like to release the good only after he is guaranteed to be paid by Alice. An HTLC enables such terms to encoded as a smart contract on a blockchain. You can learn more about HTLCs \href{https://www.investopedia.com/terms/h/hashed-timelock-contract.asp}{here}. A full list of opcodes used in the Bitcoin script is given \href{https://en.bitcoin.it/wiki/Script}{here}.
+
+\newpage
+
+\section*{Project: Rust Implementation of Bitcoin Clients}
+
+In this project, you are going to build a simplified Bitcoin client with full node functionality. The goal of the client is not to run in Bitcoin mainnet or any public testnet. Instead, the goal is to run it inside your team and let you have fun with it. You have plenty of freedom of designing and implementing this project. We provide some code in the \href{https://gitlab.engr.illinois.edu/ece598pv/ece598pv-sp2021}{Gitlab repository}. The project will be split into 6 weeks with checkpoints every week as listed below.
+
+
+\markdownInput{markdowns/week1.md}
+\markdownInput{markdowns/week2.md}
+\markdownInput{markdowns/week3.md}
+\markdownInput{markdowns/week4.md}
+\markdownInput{markdowns/week5.md}
+\markdownInput{markdowns/week6.md}
+
+\input{Problem_sets/Lec5_PS}
+
+\end{document}

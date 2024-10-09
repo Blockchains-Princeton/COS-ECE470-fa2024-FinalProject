@@ -1,0 +1,181 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{subcaption}
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 4}
+\cfoot{\thepage}
+
+\title{Lecture 4:  Peer to Peer Networking for Blockchains}
+\author{Principles of Blockchains, Princeton University,  \\ Professor:  Pramod Viswanath \\ Scribes: Soubhik Deb, Ranvir Rana and  Suryanarayana Sankagiri}
+%\date{February 4, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In this lecture, we cover the networking aspects of a blockchain system. We introduce the notion of peer-to-peer networks, of which a blockchain is an example. We describe how messages are broadcast to all users in such a network. We specify the details of the networking layer in Bitcoin. This lecture also covers two interesting ways of improving the network layer protocols. The first, called \textsf{Perigee}, is a technique to reduce the delay in propagating messages. The second, called \textsf{Dandelion}, reduces the extent to which an eavesdropper can track messages to its source.
+\end{abstract}
+
+\section*{Basic primitives and random network construction}
+In blockchain systems, the basic network-layer operation is to {\em broadcast} messages. By broadcast, we mean that a user sends some information/message to all other users in the system. There are two basic blockchain elements being broadcast:
+\begin{itemize}
+    \item data values that are to be recorded on the ledger
+    \item blocks
+\end{itemize}
+
+In a decentralized system such as a blockchain, the network should have
+\begin{itemize}
+    \item Robustness from a single point of failure: No centralized server;  
+    \item Robustness from censorship: No centralized server; 
+    \item Robustness from nodes going offline, high churn rate; 
+\end{itemize}
+Additional desirable properties include
+\begin{itemize}
+    \item a message that is broadcast should reach all users as quickly as possible
+    \item a message that is broadcast should not be traceable back to its origin (for the sake of anonymity/privacy)
+\end{itemize}
+The need for robustness implies that we do not want a client-server relationship; we settle for a peer-to-peer (P2P) network where each node has identical behavior.
+%A distributed system's security is closely tied to its network assumption; hence it is essential to design the network to mirror these assumptions. We understand p2p networking using the Bitcoin network as a reference.Examples of a P2P network include Napster and  BitTorrent. 
+
+Consider a set of users in a P2P network. An \textit{overlay network} depicts the connections between nodes, and is represented as a graph. It abstracts out the physical network switches and routers and defines virtual links between nodes. Two nodes that are connected by a link can exchange messages directly. Those that are not connected by a link must find a path connecting them on this overlay network in order to communicate messages.
+
+Overlay networks can be split into two base categories: structured and unstructured. Structured overlay networks, like \href{https://en.wikipedia.org/wiki/Chord_(peer-to-peer)}{CHORD}, assign an identifier to each node and uses that to construct well-defined routing rules. These networks are excellent for routing sending point to point messages, a use case not required for Bitcoin. Structured networks are suitable for broadcast, too; any message transmission takes $O(\log N)$ hops on CHORD with $O(\log N)$ connections per node.
+
+On the other hand, unstructured networks like $d$-regular graphs have no node identifiers; a node connects to $d$ other nodes randomly. While routing point to point messages takes $O(\log N)$ hops, it's impractical since finding the path from point A to point B involves many peer queries. On the other hand, broadcast is very efficient using gossip and takes $O(\log N)$ hops. Thus, the number of hops required is the same as the structured network with the added benefit of $O(1)$ peer connections. Hence, the Bitcoin network uses an unstructured $d$-regular overlay network. 
+
+How does broadcast take only $O(\log N)$ steps? We first need to understand the gossip-flooding-based broadcast protocol. The flooding protocol mimics the spread of an epidemic. Once a node is ``infected", it infects its peers and forever stay's infected. It is easy to see that the spread of information will happen exponentially; hence the information will take $O(\log N)$ hops to spread to all nodes. To formally understand the spread, we note that $d$-regular graphs with $d\geq 3$ are an \textit{expander graph} for large sizes ($|V|$) with high probability. An expander graph is a connected but sparse graph ($|E|=O(|V|)$) with the following property: $|\partial A| \geq \epsilon|A|$ for any connected sub-graph $A$ with $|A|<0.5|V|$. Here, $|\partial A|$ refers to the number of vertices outside $A$ with at least one neighbor in $A$. A gossip message originates with $A(0)$ as the broadcasting node with $|A(0)|=1$, in the next hop, it will spread to $\partial A(0)$ with $|A(1)|\geq (1+\epsilon)|A(0)|$. This recursion continues and we have $|A(k)|\geq(1+\epsilon)^kA(0)$. Thus, the number of steps to reach half the number of nodes is logarithmic in the number of nodes. It can be shown that the other half of the nodes can also be covered in $O(\log N)$ time.
+
+
+%Engineering issues (peer discovery, bootstrap, churn). Implementation connections (to the lab experiment). Validation of tx, blocks. How does that impact networking? What about skipping validation and doing cut-through routing? Compact blocks. (RR)
+
+\section*{Bitcoin P2P network: A systems view}
+In Bitcoin, peers connect to each other and communicate using the TCP protocol. The codebase allows for eight outgoing connections and up to 117 incoming connections. The network has a high churn rate (rate at which users enter/leave the system); hence, the node must be ready to connect to new peers. Moreover, to ensure that the peers we are connecting to are chosen randomly, the node keeps a large list of nodes running Bitcoin in the form of their (IP, port) tuple and establishes a connection to one of them randomly when a slot opens up.  
+
+How does a node bootstrap its list of peers? This happens by connecting to a set of DNS seed nodes. The seed nodes are not heavily decentralized; hence completely relying on the peer list provided by them is not advisable. On connecting to the initial set of peers, a node asks its neighbors for their peer list using {\tt getAddr} and {\tt Addr} messages. The node keeps refreshing its peer list regularly by exchanging peer lists with its peers. 
+
+Transmission of all block and transactions happen through the inventory message {\tt inv}, on receiving an {\tt inv} message the node checks if it has the block or the transaction in its local storage. If not, it sends the {\tt getData} message to fetch those blocks and transactions from the peer. Since block sizes are relatively large, block transmission can optionally happen in 2 stages. On receiving the {\tt inv} message, the node may ask for headers first using {\tt getHeaders} and ask for complete blocks only if a header chain is established. This header-first block transmission increases queries but can decrease the net bandwidth usage. It may also prevent nodes from accepting PoW invalid blocks since the node can check from the header whether PoW is valid. 
+
+We saw in the previous lecture that some nodes might be malicious. A question that may arise is: what stops malicious nodes from flooding the network with invalid blocks and transactions (i.e., with invalid PoW and/or signatures)? Such flooding will saturate the network and increase transmission delay to unacceptable levels. Such an attack is prevented by a simple design decision, forward message to peers only after validating the message; i.e., a node sends an {\tt inv} block message to its peers only after validating the block. If the adversary creates an invalid block, the block will not be propagated beyond one honest node. Additionally, nodes maintain their peers' reputation using some predefined heuristics; if a peer misbehaves (say by sending a transaction with invalid signatures), its reputation is downgraded and after a certain lower threshold is disconnected.  
+
+As a side effect, forward after validation structure increases the net delay in broadcasting a block across the network. Several ``trusted" relay networks have been established for speeding up propagation. Once a block is validated by a peripheral node in a relay network, it is gossiped to all other nodes before performing local validation since the inter-node communication is trusted. An example is FRN (fast relay network); it creates a hub and spoke model with trusted servers as hubs. 
+
+Another proposal to speed up propagation is using compact blocks. Note that a transaction is broadcast in the network twice. Once when the transaction is generated and the second time as a transaction is a block. We can remove this redundancy by introducing compact blocks. For nodes enrolled for compact block relaying, their peers guess the transaction the node has received while forwarding a new block and only send a compact block containing the original block contents sans the guessed transactions. Any mismatch in guessing is resolved later using a {\tt getblktxn} message. 
+
+\section*{Random Geometric Graphs}
+In the random network topology, each node in the peer-to-peer (P$2$P) network $G$ chooses $c$ other nodes uniformly at random from the set of all nodes in the network $G$ and sets them as its neighbors. Thus, whenever a node $n$ needs to broadcast a message, it transmits the message to these $c$ neighbors who in turn relays the message to their own neighbors. While the result graph is a expander with low diameter, the shortest path taken for routing a message from the source to the destination is sub-optimal in the sense that the length of this shortest path could be much worse than the {\em geodesic} shortest path (see Fig~\ref{fig:random-topology}). Furthermore, the random network topology fails to take into account the heterogeneities present in the internet: different users could have different bandwidth and processing power, non-uniformity in mining power that make a difference to networking efficiency. 
+
+{\sf Perigee} is a recent P2P protocol that aims to create a random {\em geometric} graph topology; this way the shortest path on the connectivity graph is also the shortest {\em geographic} (geodesic)  path. There are two types of neighbors for a node $n$: (a) \textit{outgoing neighbors}: the set of neighbors to whom the node $n$ sends and receives messages; (b) \textit{incoming neighbors}: the set of neighbors from whom message is only received. {\sf Perigee} is a decentralized algorithm  for selecting the set of outgoing neighbors with the objective to minimize the time it requires for a broadcast message to reach $90\%$ of the nodes in the network. The overarching idea of {\sf Perigee} is to update the set of outgoing neighbors by exploiting the information gathered by interacting with the current set of outgoing neighbors while exploring new connections in the network; this is done by making a connection to the classical \href{https://epubs.siam.org/doi/abs/10.1137/S0097539701398375}{multi-armed  bandit problem} in statistical decision making theory.
+
+In {\sf Perigee}, a node $n$ in proceeds in a round-by-round basis under the following steps:
+\begin{enumerate}
+    \item A round comprises of $M$ unique messages that has been broadcast in the network. Let these $M$ messages in round $r$ be represented by $\mathcal{M}^r$ and $\Gamma^r$ represent the set of outgoing neighbors in round $r$. For each message $m \in \mathcal{M}^r$, the node $n$ records the timestamp $t^m_{\text{nbr}}$ when that message $m$ was received from each of its outgoing neighbor $\text{nbr} \in \Gamma^r$. The node $n$ also records the earliest timestamp $t^m_{\text{earliest}}$ when it received the message $m$. Note that it is possible that the node $n$ received the message $m$ for the first time from a non-outgoing neighbor.
+    \item At the end of the round, the node $n$ assigns score to each of its outgoing neighbors based on the timestamps it recorded in step $1$. Towards that end, the node $n$ first determines $t^m_{\text{nbr}} - t^m_{\text{earliest}}$ for each outgoing neighbor $\text{nbr} \in \Gamma^r$ and message $m \in \mathcal{M}^r$. Now, the node $n$ employs a scoring method to assign scores to each outgoing neighbors. There are two flavors of scoring methods. 
+    \begin{itemize}
+        \item \textit{Scoring each outgoing neighbor individually.} For each outgoing neighbor $\text{nbr} \in \Gamma^r$, the score is computed as $90\textsuperscript{th}$ percentile of the set $\{t^m_{\text{nbr}} - t^m_{\text{earliest}} \vert m \in \mathcal{M}^r\}$. This scoring approach  reflects a preference to retain an outgoing neighbor from which messages are received relatively earlier. Thus, lower the score for a neighbor $\text{nbr}$, higher is the preference to retain that neighbor in the next round. Therefore, assuming  $k$ out of $\mid \Gamma^r \mid$ outgoing neighbors are to be retained for the next round, the node $n$ retains the outgoing neighbors that are among the $k$ lowest scorers.
+        \item \textit{Scoring groups of neighbors jointly.} In contrast to previous approach, the idea behind joint scoring is to assign the score to a group of neighbors $\Gamma_{\text{retain}}$. First, set $\Gamma_{\text{retain}} = \phi$ and determine the outgoing neighbor $\text{nbr} \in \Gamma^r$ that has the lowest $90\textsuperscript{th}$ percentile of the set $\{t^m_{\text{nbr}} - t^m_{\text{earliest}} \vert m \in \mathcal{M}^r\}$ and include it in $\Gamma_{\text{retain}}$. Then, score each $\text{nbr} \in \Gamma^r \setminus \Gamma_{\text{retain}}$ by computing the $90\textsuperscript{th}$ percentile of the set \[\{ \min(t^{m}_{\text{nbr}} - t^{m}_{\text{earliest}}, \min(\{t^{m}_{\text{nbr}'} - t^{m}_{\text{earliest}} \mid \text{nbr}' \in \Gamma_{\text{retain}}\})) \mid m \in \mathcal{M}^r\}.\] Include the $\text{nbr} \in \Gamma^r \setminus \Gamma_{\text{retain}}$ with the lowest score in $\Gamma_{\text{retain}}$. Essentially, we are determining the outgoing neighbor in  $\Gamma^r \setminus \Gamma_{\text{retain}}$ that best complements the existing neighbors in $\Gamma_{\text{retain}}$ to minimize the time required for the node $n$ to receive $90\%$ of the messages. Assuming  $k$ out of $\mid \Gamma^r \mid$ outgoing neighbors are to be retained for the next round, this process is continued until $\mid \Gamma_{\text{retain}} \mid = k$.
+    \end{itemize}
+    This step describes the process for retaining $k$ outgoing neighbors from $\Gamma^r$ by \textbf{exploiting} the information gathered from interacting with neighbors in round $r$. The retained outgoing neighbors are included into $\Gamma_{r+1}$.
+    \item  Next, the node $n$ does \textbf{exploration} by selecting uniformly at random $\mid \Gamma^r \mid - k$ nodes from the set of all nodes in the network that are not in $\Gamma^r$ and are included in $\Gamma^{r+1}$. 
+\end{enumerate}
+\begin{figure}[ht]
+\centering
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=.75\linewidth]{figures/random_topology.pdf}
+  \caption{Random network topology}
+  \label{fig:random-topology}
+\end{subfigure}%
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=.75\linewidth]{figures/perigee.pdf}
+  \caption{Perigee}
+  \label{fig:perigee}
+\end{subfigure}
+\caption{Observe that, for Perigee, shortest path follows much closer to the geodesic shortest path.}
+\end{figure}
+
+
+
+\section*{Network Anonymity and Privacy}
+In a blockchain system, the blockchain data structure is visible to all participants. In the context of a cryptocurrency, the blockchain contains every transaction in the history of the currency. More generally, it can contain sensitive data of users, which should not be made public. Indeed, this is a necessary feature of blockchains if it is to be publicly verifiable ledger. How then can one obtain privacy in blockchains?
+
+For the sake of privacy, Bitcoin originally proposed using pseudonymous identifiers. Each user participates in the system via one or more psuedonym, each of which is linked to a public key. This paradigm has been adopted by most cryptocurrencies today. Anybody observing the blockchain learns only the transaction patterns of each pseudonym. As long as these pseudonyms cannot be linked to the owner's human identity, privacy is preserved. However, multiple studies have shown that such a system is vulnerable to de-anonymization attacks, particularly in the presence of side information. % \cite{narayanan2009anonymizing,backstrom2007wherefore,fistful,androulaki2013evaluating,ober2013structure}.
+
+Here, we focus on a specific class of de-anonymization attacks wherein an adversary who observe traffic flowing over the P2P network can obtain some information about the users. In most cryptocurrencies, new transactions are spread over the network according to some pre-specified flooding protocol (typically a gossip algorithm). If an adversary observes this traffic at a fine enough time resolution -- e.g., by setting up a supernode that connects to many nodes -- it can often link transactions (and hence the pseudonym of the sender) to the IP address that originated the transaction. The IP address can then be associated to a human identity by other means. We then discuss an alternate networking protocol called \textbf{Dandelion} which provides theoretical privacy guarantees.
+
+\subsection*{A mathematical model}
+We first discuss a mathematical model for the network de-anonymization problem. The model involves the protocol by which messages are spread in the network, and a model of the adversary that collects information about this process and tries to identify the source of the message. Typically, the underlying network is modeled as a graph $G = (V,E)$. Here, $V$ denotes the set of all nodes participating in the blockchain system and $E$ is the set of edges representing TCP connections between nodes. As a simplification, we consider the problem of de-anonymizing a single message (transaction/block) sent by a particular node $v^* \in V$. When modeled as above, the problem of de-anonymization boils down to guessing $v^*$ given some observations of how the message has spread. 
+
+%Although messages sent in the network include both transactions, for this portion we will be concerned only with transactions. This is because we want to link the The source of the transactions
+
+In the context of de-anonymization, there are two main adversarial models: \emph{eavesdropper adversaries} and \emph{botnet (spy-based) adversaries}. Eavesdropper adversaries run a supernode that connects to all (or a substantial subset) of nodes in the network (Figure \ref{fig:eavesdropper}).
+ From the perspective of an honest node, the eavesdropper looks just like any other node. Honest nodes therefore relay transactions normally, allowing the eavesdropper to collect timestamps and other metadata. Combined with information about the graph topology, this metadata can be used to infer the source of a particular transaction. One important property of eavesdropper nodes is that they typically do not relay messages; they only collect communications relayed by other nodes. 
+
+Botnet or spy-based adversaries (Figure \ref{fig:botnet}) 
+ instead consist of a set of corrupt, colluding nodes that participate in the network normally, both accepting \emph{and} relaying information. We let $p$ denote the fraction of spies in the network, and let $V_A, V_H \subseteq V$ denote the set of adversarial and honest nodes, respectively. As the name suggests, this adversarial model is motivated by a botnet that spawns cryptocurrency nodes. The key difference compared to the eavesdropper adversary is that each botnet node may have limited visibility into the network (e.g., if it only connects to a few peers rather than the entire network), and botnet adversaries may inject packets into the network. 
+
+\begin{figure}
+\begin{minipage}{0.5\textwidth}
+\centering
+    \includegraphics[width=1.2in]{figures/eavesdropper}
+    \caption{Eavesdropper adversary. A well-connected supernode eavesdrops on relayed communications.}
+    \label{fig:eavesdropper}
+\end{minipage}
+\hspace{0.1in}
+\begin{minipage}{0.5\textwidth}
+    \centering
+    \includegraphics[width=1.2in]{figures/botnet}
+    \caption{Botnet adversary. Red nodes represent  corrupt ``spy nodes", which use observed metadata to infer the transaction source.}
+    \label{fig:botnet}
+\end{minipage}
+\end{figure}
+
+As discussed in the sections above, many cryptocurrencies---including Bitcoin---broadcast content using a gossip protocol called \emph{diffusion}. Under diffusion, each node transmits the message to each of its neighbors with independent, exponentially-distributed delays. The problem of detecting the source of a diffusion process over a graph is well-studied. An \href{https://ieeexplore.ieee.org/abstract/document/5961801}{early work}  who studied this problem in a so-called \emph{snapshot model}. Under this model, the diffusion process is allowed to spread in the network until some time $T$. At this time, the adversary gets to observe which nodes have the message, and which do not. The authors showed that one can reliably infer the source of a diffusion process, even as $T$ grows to infinity.
+
+The de-anonymization algorithms suggested in this and other works revolve around the notion of \textit{centrality} or symmetry; because diffusion spreads content symmetrically on the underlying network, the message (roughly) spreads in a disc over the graph, with the true source at the middle of that disc. The above results imply that an adversary with partial global oversight can infer the shape of the disc and identify the central node with non-negligible probability. These results suggest that diffusion is poorly-suited to protecting users' anonymity at the network level, which motivates the need for alternative spreading protocols that protect users' anonymity.
+
+\subsection*{Dandelion}
+The key idea that emerges from the analysis of diffusion is that one must break the symmetry of the message spreading (aka gossiping) protocol in order to prevent the adversary from accurately guessing the message.  The {\sf Dandelion} P2P networking protocol, which incorporates this idea, has two phases: a \textit{stem phase} (aka anonymity phase) and a \textit{fluff plase} (aka diffusion phase). In the stem phase, each node propagates each message along a randomly chosen direction. After a random number of hops, the stem phase ends. Then, in the fluff phase, the transaction is broadcast via diffusion to the rest of the graph. As mentioned, the stem phase provides the anonymity guarantees, while the latter fluff phase helps propagate the message to all users without much delay.
+
+
+The {\sf Dandelion} protocol is explained in more detail below. {\sf Dandelion} proceeds in asynchronous epochs; each node advances its epoch when its internal clock reaches a random threshold (in practice, this will be on the order of minutes). Within an epoch, the main algorithmic components of {\sf Dandelion} are:
+\begin{enumerate}
+    \item \textbf{Anonymity graph:} The random walk takes place on an overlay of the P2P graph called the anonymity graph. This overlay should be chosen either as a random cycle graph (i.e., a 2-regular graph) or a 4-regular graph. This 4-regular graph is embedded in the underlying P2P graph by having each node choose (up to) two of its outbound edges, without replacement, uniformly at random as {\sf Dandelion} relays. This does not produce an exact 4-regular graph, but an approximation.Each time a node transitions to the next epoch, it selects fresh {\sf Dandelion} relays.
+    \item \textbf{Forwarding of a node’s own transactions:} Each time a node generates a transaction, it forwards the transaction in stem phase along the same randomly-selected outbound edge on the anonymity graph. If the anonymity graph is a cycle, there is only one outbound edge per node; otherwise, the node must choose one of its two outbound edges.
+    \item \textbf{Relaying of other nodes’ transactions} Each time a node receives a stem-phase transaction from another node, it either relays the transaction or diffuses it. The choice to diffuse transactions is pseudo-random, and is computed from a hash of the node’s own identity and epoch number. Note that the decision to diffuse does not depend on the transaction itself—in each epoch, a node is either a diffuser or a relay node for all relayed transactions. If the node is not a diffuser in this epoch (i.e.,it is a relayer), then it relays transactions pseudo-randomly; each node maps each of its incoming edges in the anonymity graph to an outbound edge in the anonymity graph (with replacement). This mapping is selected at the beginning of each epoch, and determines how transactions are relayed.
+    \item \textbf{Robustness mechanism} Each node tracks, for each stem-phase transaction that it sends or relays,whether the transaction is seen again as a fluff-phase transaction within some random amount of time. If not, the node starts to diffuse the transaction
+\end{enumerate}
+
+% \subsection*{Guarantees on Dandelion}
+% The key theoretical result concerning {\sf Dandelion} provides upper bounds on both the \textit{precision} and the \textit{recall} with which an adversary can estimate the source of a message. \textit{define precision, recall.}
+
+
+\section*{Reference material}
+
+{\sf Perigee} is a recent P2P protocol that adapts the network topology to a random geometric network, presented in ``\href{https://dl.acm.org/doi/abs/10.1145/3382734.3405704}{Perigee: Efficient Peer-to-Peer Network Design for Blockchains}," 
+Mao, Deb, Venkatakrishnan and Kannan, PODC 2020. %{\sf Perigee} uses ideas from the \href{https://epubs.siam.org/doi/abs/10.1137/S0097539701398375}{multi-armed  bandit}  problem in theory of statistical  decision making. 
+
+{\sf Dandelion} networking was invented in ``\href{https://dl.acm.org/doi/abs/10.1145/3084459}{Dandelion: Redesigning the Bitcoin Network for Anonymity}," Fanti, Venkatakrishnan and Viswanath, Sigmetrics 2017. 
+
+
+\end{document}

@@ -57,6 +57,28 @@ Data entries will be collected via Google Forms.
 ### **Deliverables**
 Each group should submit at least 10 data entries. Due date: Oct 24, 10pm. 
 
+### **Baseline**
+
+Baseline Prompt: 
+[Upload the three files: bitcoin_client_data.jsonl, ed_discussion_fa2023.json, lecture_notes.json using "Attach File"]
+"You're a professional assistant for me to learn the course ECE/COS 470 Principles of Blockchains (https://web3.princeton.edu/principles-of-blockchains/).  
+All the materials of this course are attached below, 
+including the programming assignment GitHub repo (bitcoin_client_data.jsonl), 
+Ed discussion log from last year's course (ed_discussion_fa2023.json), 
+and the tex source file of all lecture notes (lecture_notes.json). 
+
+I may ask you questions related to lecture notes, programming assignments, or homeworks, and you are expected to solve any of my confusion and provide step-by-step instructions and reasoning for your response. 
+Please calm down, think step by step, and double check your answer before finalizing the response. 
+When you are not confident about the answer, say "Sorry but I'm not sure" instead of producing random misleading responses. 
+Here is my question: 
+
+..."
+
+An example of baseline: https://chatgpt.com/share/67060269-9568-8012-aab3-daf425e5598f
+
+To guarantee consistency, please do not modify anything except for "..." in the baseline prompt, and use GPT-4o for generating baseline response. 
+
+
 ### **Grading Criteria for Stage 1 (for a total of 32%)**
 - **Completeness (16%)**: At least 10 data entries are submitted by each group. All required components (baseline log, solution, rationale) are included and well-documented.
 - **Quality of Solution (4%)**: The solution should clearly explain the reasoning, with a step-by-step approach that makes it easy for others to understand.

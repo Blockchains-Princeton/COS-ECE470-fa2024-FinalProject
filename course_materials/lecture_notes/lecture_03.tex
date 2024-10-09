@@ -1,0 +1,207 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.25in]{geometry}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue
+}
+\usepackage{fancyhdr}
+
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 3}
+\cfoot{\thepage}
+
+\title{Lecture 3:  Proof of Work and Nakamoto Consensus}
+\author{Principles of Blockchains, Princeton University,  \\ Professor:  Pramod Viswanath \\ Scribes: Suryanarayana Sankagiri and Xuechao Wang}
+\date{February 2, 2021}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract} This lecture covers the {Nakamoto consensus protocol}. Coupled with the blockchain data structure, the protocol realizes a decentralized ledger, allowing multiple parties to write to it in a consistent manner. Moreover, the protocol is such that it is robust against an adversary that tries disrupt it; the honest parties continue to have a consistent, ever-growing ledger. In the context of this protocol, we introduce the terms {mining}, {Proof of Work}, {longest-chain rule} and {$k$-deep rule}. We also discuss what it means for such a decentralized ledger to be secure.
+\end{abstract}
+
+In the last lecture, we saw that the blockchain data structure enables a tamper-evident and tamper-resistant ledger but with a caveat: only a single party has the privilege to write into the ledger. Other parties may merely read the ledger and verify whether or not it is consistent. To create a decentralized ledger, we showed that the following three questions must be answered.
+\begin{enumerate}
+    \item Who are the set of users that can participate in and how are they chosen? 
+    \item When and which block does a user get to append and how do others verify this rule in a decentralized manner?
+    \item Where does a user append the block? In principle, a block can be appended to any other block in the view of the user. 
+\end{enumerate}
+In this lecture we see how Bitcoin (and many other cryptocurrencies that followed) answers these questions via the \textbf{Nakamoto consensus protocol}.
+
+\section*{Intuition behind Nakamoto consensus}
+The Nakamoto consensus protocol, first introduced in the Bitcoin whitepaper, can be described briefly as follows. At any given time, there are a certain number of users that are actively participating in writing to the decentralized ledger, one block at a time. These users can change with time; new users can join in this task of their own free will, without anyone's permission. At regular intervals, a user is chosen at random among the ones currently present to propose the next block. This user creates a block with new data, and the hash pointer of the last block in the blockchain. In effect, it appends the new block to the end of the blockchain, thereby extending the ledger. It then signs this block and broadcasts it to all other users in the system. Other users receive this block, perform some checks on it, and adopt it into (their local copy of) the ledger. The process repeats indefinitely. The process is initialized from a \textbf{genesis block}, which is known to all users right from the beginning.
+
+How can such a system be realized? In particular, how can one randomly pick a user to propose the next block, especially when the number of users is variable? Nakamoto's idea was to use a simple concept called \textit{proof-of-work}, described next. This concept is a salient feature of many blockchain systems, and arguably the most important novelty of Bitcoin. It provides an answer to the first two questions above. 
+
+What other aspects go into the creation of a new block? Firstly, the miner must include new data-values that have not been included in the ledger so far. This aspect of the protocol will be covered in the coming lectures. Secondly, it must include the hash pointer of a block that is already on the ledger:   the new block should point to the last block currently on the ledger. Formally called the \textit{longest-chain rule} for block proposal, this is another salient feature of the Nakamoto consensus protocol. It answers the third question above. This seemingly innocuous rule has important implications for the security of the protocol, which become clear when we consider adversarial behavior, i.e., users who do not follow this rule.
+
+\section*{Proof-of-work and mining}
+Hash puzzles are a game in which one tries to find a {\sf nonce} (an integer) such that 
+$$
+H({\sf nonce}, {\sf data}) <  T, 
+$$
+where $T$ is the {\em target  } difficulty level. 
+Here, {\sf data} is some pertinent string; every new piece of data defines a new hash puzzle. If the the target $T$ is small, one needs to try out many different nonces in order to solve the puzzle. For each nonce, one most re-compute the hash function. Every hash computation takes some non-zero time. The exact time depends on the length of the data string; for the sake of estimates, we can assume it to be a few nanoseconds on a modern computer. A party that has solved such a hash puzzle must clearly have tried a large number of nonces and computed hashes with each one of them. Thus, it must have put in a lot of `work' , i.e., computation time. It simply cannot guess a nonce that solves the puzzle in a short time (except with small probability, purely by luck). We say that a nonce that solves the hash puzzle (in conjunction with the pertinent data) serves as a '\textbf{proof-of-work}' (PoW for short). 
+
+%Note that the actual amount of time it takes for a person to solve the hash puzzle is random; only its expected value can be controlled by the threshold. To speed things up, the person can perform this task in parallel on multiple computers (or get a faster computer).
+
+Now imagine multiple parties competing to solve the same hash puzzle the earliest. As we saw, there is no real strategy; they must simply try random nonces and re-compute the hash each time with a different nonce. Since multiple parties are working towards the same puzzle, it will get solved faster. This is because the search for different nonces is now split among different computers which work in parallel. Which party solves the puzzle the first? A priori, this cannot be determined; the winner of this race is random, beyond the control of the competing parties. At best, a party can improve its chances by buying a better computer which computes hashes faster. Even so, it is unlikely that one party has much more computing power than all the others combined. Thus, multiple parties have a reasonable chance of winning the race. Moreover, the winner changes from one hash puzzle to another.
+
+The process of searching for a nonce that solves the hash puzzle is called \textbf{mining}. The precious resource being mined here is the right nonce, i.e., the proof-of-work. Just as one must keep digging (mining) until one strikes gold, one must keep computing hashes with random nonces until one solves the puzzle. The parties competing to solve the hash puzzle are called \textbf{miners}. In the Nakamoto consensus protocol, what is the gold that the miners get upon solving the hash puzzle? In a nutshell, they get to propose a new block. Before we specify the details, let us note that such a system has the properties described in the previous section, i.e., new blocks are proposed at some regular intervals of time (with some random fluctuations), and that the proposer is randomly chosen among the currently active users.
+
+We now elaborate on how hash puzzles are used in the context of blockchains. In blockchains operating with the Nakamoto consensus protocol, each block contains a nonce (this is simply a special field in the block). The \textbf{block header} consists of the Merkle root of data in the block, the hash pointer to the previous block, the nonce, the timestamp of the block, and perhaps some other meta-data relevant to the application. A block is considered \textit{valid} only if the hash of its block header is less than some pre-specified target  (more on how this target is chosen later). In Bitcoin, the target is set such that a new block is expected every ten minutes. Note that the hashes are computed only on the block header and not on the whole block data, which makes it more efficient to compute them.
+
+At any given time, each miner $m$ creates a block $B_m$ with some data, and includes the hash pointer of the latest known block (i.e., the block at the end of the ledger) into $B_m$. For different miners $m$, $B_m$ may contain identical data, or may differ. All miners search for nonces to solve the hash puzzle. The first successful miner immediately broadcasts its block, with the proof-of-work nonce to other users. We say that a \textit{new block is mined}; let this block be $B$. These other users first check the proof-of-work (simply check whether the new block's header that they receive has a small enough hash). If this criterion is satisfied, they then create a new block, $B'_m$, locally, with fresh data and a hash pointer pointing to $B$. We say that the miners mine on top of $B$. The process then repeats. This completes the description of the mining process in a proof-of-work system.
+
+\section*{Forks and the longest-chain rule}
+Note that the mining rate is different from the rate at which the ledger grows. Ideally, each new block should lead to the growth of the ledger. However, this is not always the case. For example, it is possible that a miner mines a valid block but does not publish it; in this case, the ledger does not grow (this is dishonest behavior, but we must account for it nevertheless). It is also possible that two valid blocks are mined with the same parent block, in which case the ledger grows only by one block. This can happen if the second hash puzzle is solved before the pertinent miner heard of the previous block. After all, it takes a non-zero amount of time for a block to be communicated across the network, especially if the block has a lot of data.
+
+In general, the set of blocks mined at any given point in time form a directed tree, rather than a single chain. We say that the blockchain has \textbf{forked} when a single block has two or more children blocks. We saw how forks might occur due to communication delays or adversarial behavior in the previous paragraph. As such, there could be many forks over time. What then should the users consider as `the ledger'? The \textbf{longest-chain rule} states that the longest chain among all published blocks should be treated as the ledger. Thus, users should build a new block and append it to the longest chain that they currently know of. When there are ties (i.e., there are two or more chains of equal length, that fork at some level), one favors the branch of the fork where the blocks' hashes are the smallest.
+
+\section*{Adversarial users}
+The description so far describes the salient aspects of the  Nakamoto consensus protocol. (Some more details will be covered in the next  lecture). All users are expected to follow the protocol exactly. In reality, there may be some who deviate from the protocol; they are \textbf{adversarial users} (aka corrupt/malicious users). Those who do follow the protocol are called honest parties. What might be the aim of the adversarial parties? In general, their aim is to disrupt the system in any possible way. Here, we describe one possible attack on the append-only property of the ledger, called the \textbf{private attack}.
+
+In the private attack, a group of adversarial users mine new blocks, but keep these blocks privately to themselves; they do not broadcast these blocks throughout the network. Honest users are simply unaware of these private blocks, and continue to mine as if these blocks never existed. In effect, the adversarial users have created a fork in the blockchain, but one that only they can see. Suppose, due to randomness in the mining process, the adversarial users get lucky and build a few (say, five) private blocks in quick succession. During the same interval, say the honest users only mine three blocks. In such a case, the private (adversarial) chain is longer than the public (honest) chain. Now, the adversarial users release their private chain to all other users. By the longest-chain rule, these honest users must give up their chain and adopt the adversarial chain. In effect, the last three blocks have been erased from the ledger.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=10cm]{figures/private_attack.png}
+    \caption{An Illustration of the private attack}
+    \label{fig:private_attack}
+\end{figure}
+
+Figure \ref{fig:private_attack} illustrates the fork in the blockchain when a private attack is launched. The dashed blocks are the privately held blocks of the malicious users, while the solid blocks are publicly seen blocks mined by honest users. 
+
+
+Successfully executed private attacks can wreck havoc with the trust in the blockchain. This is best illustrated with a {\em double-spend} action enabled by the private attack. Suppose a transaction ({\sf tx}) is embedded in a block $B$ (see Figure~\ref{fig:doublespend}): say, the transaction encodes payment of seven Bitcoins to {\sf Tesla} (which recently announced plans to accept Bitcoins for their cars).  Upon seeing the {\sf tx} embedded in a block on the longest chain, suppose {\sf Tesla} decides to release the car to the source of the transaction (thus ``confirming" or completing the transaction {\sf tx}). Then an adversary seeing that the  {\sf tx} has been confirmed could launch a private attack: release two or more blocks it has been mining in private. Now the block $B$ is no longer in the longest chain and the transaction {\sf tx} no longer in the ledger maintained by the participants. Now the source of the transaction is free to double-spend the seven Bitcoins; this is a fatal attack  demolishing any trust embodied by the blockchain. One way to address this is to {\em delay} confirming the transaction; this is described next. 
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=8cm]{figures/doublespending.png}
+    \caption{An Illustration of the double spend attack.}
+    \label{fig:doublespend}
+\end{figure}
+
+
+\section*{The $k$-deep confirmation rule}
+In the Nakamoto consensus protocol, occasional changes at the end of the ledger is impossible to avoid. We discussed above how malicious users can coordinate and launch a private attack, which effectively re-writes the last  block of the ledger. Even if we assume that there are no adversarial users, we have seen that forks can occur because of network delay. Wherever there are forks, there is the possibility that the longest-chain may switch, which would mean that the last portion of the ledger is re-written. 
+
+The solution around this is simple and intuitive. Users should treat a block as \textbf{confirmed} only if it is {\em buried deep enough under other blocks}. Put differently, only if some $k$ blocks are built directly below a block $B$ should the block $B$ be confirmed. Confirming a block means that the portion of the ledger up to that block is now immutable. It is not advisable to confirm very recent blocks as they may be over-written, due to forks in the blockchain. 
+
+The \textbf{$k$-deep confirmation rule}, mentioned above, reflects the belief that any change in the longest-chain are towards the end of the chain. The prefix of the longest chain at some time $t$, i.e. the chain obtained by dropping the last $k$ blocks, continues to remain a prefix of the longest chain at future times too. Note that for any finite value of $k$, it is not guaranteed with absolute certainty that this will be true. If the adversarial users invest in a lot of computing power, block communication among honest users, or simply get very lucky, they could even overturn a deeply buried block. However, the larger the value of $k$, the more unlikely it is that this happens. In lecture 6, we show that the probability with which this happens decreases exponentially with $k$, so long as the honest miners control a majority (i.e., more than 50\%) of the hash power.
+
+%\textit{Talk about confirmation. Point out that there is no finality.At best probabilistic guarantee. When should we decide to “confirm”? This is the first time this concept is showing up in our lecture, so we need to motivate it. }
+
+\section*{Variable mining difficulty}
+A key requirement of deployed PoW blockchains is to adapt to the immense variation in mining power. For example, the mining power of Bitcoin increased exponentially by an astonishing factor of $10^{14}$ during its decade of deployment. This is a reflection of the growing popularity of Bitcoin; many people have invested a lot of computational resources into it over time. If Bitcoin had continued to use the same difficulty for the hash puzzle, then the average inter-block time would have fallen from the original $10$ minutes to $6$ picoseconds. By adjusting the difficulty threshold of Bitcoin, using a difficulty adjustment algorithm, the average inter-block time is kept constant over the course of a long duration of time.
+
+The threshold below which the hash puzzle output lies in successful PoW mining is the {\em target} of a block. The {\em difficulty} of each block is measured in terms of how many times the block is harder to obtain than using the initial target of the system that is embedded in the genesis block. The {\em chain difficulty} of a chain is the sum of difficulties of all blocks that comprise the chain, then each block in the chain {\em covers} an interval of chain difficulty. We also refer the chain difficulty of a block as the chain difficulty of the chain ending at this block. There are three core ideas to the Bitcoin difficulty adjustment algorithm: (a) vary the difficulty target of block mining based on the average inter-block time from the previous epoch (of $2016$ blocks), (b) use the {\em heaviest} chain (calculated by the sum of the block difficulties) instead of the longest chain to determine the ledger, and (c) allow the difficulty to be adjusted only mildly every epoch (by an upper bound of a factor of $4$). While this appears to be a simple and intuitive algorithm, minor seemingly-innocuous variants turn out to be dangerously insecure.
+
+Consider a simpler algorithm using only (b), i.e., simply let the miners choose their own difficulty and then use (b) the heaviest chain rule. At a first glance, this rule appears kosher - the heaviest chain rule seems to afford no advantage to any miner to manipulate their difficulty. However, this lack of advantage only holds in expectation, and the variance created by extremely difficult adversarial blocks can thwart a confirmation rule that confirms deeply-embedded blocks, no matter how deep, with non-negligible probability proportional to the attacker's mining power. We give a simple calculation here. Suppose honest miners are adopting the initial mining difficulty as defined in the genesis block, with expected inter-block time being 10 minutes. Let 10 minutes be our unit of time and the initial difficulty be the difficulty unit, hence on average it take $k$ units of time to mine a honest chain with $k$ blocks. See Figure ~\ref{fig:bahack0} for illustration. Suppose the adversarial mining power is half of the honest mining power (or $1/3$ of total mining power). To mine a heavier chain, the adversary only needs to mine one block which is as difficult as $k$ honest blocks, within $k$ unit of time. Then the adversarial mining process follows a Poisson point process with rate $1/2k$, and the number of adversarial blocks mined in $k$ unit of time follows the Poisson distribution ${\sf Poiss}(1/2)$. Hence the success probability of this attack would be
+$$\mathbb{P}(\rm attack~succeeds) = \mathbb{P}({\sf Poiss}(1/2)\geq 1) = 1 - e^{-1/2} \approx 39.3\%,$$
+which is a constant independent of $k$, therefore any $k$-deep confirmation rule will fail.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=9cm]{figures/Bahack0.png}
+    \caption{A simple attack if allowing miners to choose their own difficulty. The adversary mines one block which is as difficult as $k$ honest blocks.}
+    \label{fig:bahack0}
+\end{figure}
+
+Now consider a more detailed rule involving only (a) and (b). It turns out that there is a difficulty raising attack \cite{bahack2013theoretical}, where the adversary creates an epoch filled with timestamps extremely close-together, so that the difficulty adjustment rule from (a) will set the difficulty extremely high for the next epoch, at which point, the adversary can utilize the high variance of the mining similar to the aforementioned attack. Now we describe this attack in detail. Note that the adversary can put any timestamp in its private blocks, so the difficulty of the second epoch in its private chain can be arbitrary value as long as the adversary completes the first epoch. Let $B$ with difficulty $X$ be the first block of the second epoch in the private chain, then $B$ has chain difficulty $2016 +X$. See Figure ~\ref{fig:bahack} for illustration. To mine an honest chain with chain difficulty $2016 +X$, on average it takes $2016 + X$ unit of time. On the other hand, considering the same adversary, it takes on average $4032$ unit of time for it to complete the first epoch in its private chain. Therefore, to succeed in this attack, the adversary needs to mine the block $B$ within $ X - 2016$ unit of time, which happens with probability:
+$$\mathbb{P}(\rm attack~succeeds) = \mathbb{P}({\sf Poiss}(\frac{X-2016}{2X})\geq 1) = 1- e^{-\frac{X-2016}{2X}} \approx 1 - e^{-1/2} \approx 39.3\%,$$
+if $X \gg 2016$. Note that the success probability is independent of the length of the public longest chain, hence any $k$-deep confirmation rule will fail again.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=10cm]{figures/Bahack.png}
+    \caption{The difficulty rising attack. The adversary raises the difficulty to extremely high in the second epoch by faking timestamps.}
+    \label{fig:bahack}
+\end{figure}
+
+This more complex attack is only thwarted using the full protocol that employs (a), (b) and (c) together. Formally, the Bitcoin difficulty adjustment algorithm is as follows: Consider a chain of $v$ blocks with timestamps $(r_1 \ldots r_v)$. For fixed parameters $\tau$ (= 4  in Bitcoin), $\Phi$ the length of an epoch in number of blocks (= 2016 in Bitcoin), $\Lambda_0$ the expected duration of an epoch (= 2 weeks in Bitcoin). The target calculation function $D: \mathbb{Z}^* \rightarrow \mathbb{R}$ is defined as
+
+\begin{align*}
+    D(\epsilon) &= T_0,\\
+    D(r_1 \ldots r_v) &= \left\{ \begin{array}{ll}
+         \frac{1}{\tau}T& \text{if } \frac{\Lambda}{\Lambda_0}T < \frac{1}{\tau}T  \\
+         \tau T&  \text{if } \frac{\Lambda}{\Lambda_0}T > {\tau}T \\
+         \frac{\Lambda}{\Lambda_0}T & \text{ otherwise}
+    \end{array}\right.
+\end{align*}
+where $T_0$ is the initial target as defined in the genesis block, and $\Phi' , \Lambda,$ and $T$ correspond to the last block, duration, and target of the last completed epoch, respectively, i.e., $\Phi' = \Phi \lfloor v/\Phi \rfloor$, $\Lambda = r_{\Phi'} - r_{\Phi' -\Phi}$ and $T = D(r_1 \ldots r_{\Phi'-1})$. A full and beautiful analysis of Bitcoin rule is provided in \cite{full2020}.
+
+%\section*{Sybil resistance}
+
+%\section*{Skeleton}
+%Bitcoin is permissionless, so anyone can participate in the block creation process. Which user gets to propose a block and when is decided through a “mining” process. The user always appends a new block as the leaf of the longest chain in the block tree data structure it has locally. This rule is also referred to as “the longest chain rule”. 
+
+%The points (1) and (2) are best explained jointly through a process called “mining”. Mining allows everyone to participate through a “proof of work” process. The main point of mining is to have roughly one block produced every $T$ seconds (where $T$ is slow enough so that the generated block can be broadcast over the network to everyone). 
+
+%Explain the mining process. Mining simply cannot be faked because of hash functions. Permissionless and at the same time prevents spam (sybil resistance). 
+
+%Show how the threshold has dramatically varied over the lifetime of Bitcoin. Explain the variable difficulty mining rule. Point out the subtleties of the rule (and justify some of the choices that were made). 
+
+%Explain the longest chain rule. If there are two chains of equally long length, then ties can be broken arbitrarily (although the rule says to stick to the chain that you had first). 
+
+\section*{Bitcoin is Permissionless}
+In Bitcoin, participants can generate a new (secret key, public key) pair for themselves at any point in time. Thus, a single user can pretend to be multiple different people. In fact, doing so is encouraged for privacy reasons. Such a system is called a \textbf{permissionless system}. However, creating multiple identities in Bitcoin does not truly increase one's representation in the system; that is determined by the mining (computation) power, which can only be grown by a capital investment. If the system were such that an adversary could gain advantage by creating multiple identities, then such an attack is called a \textbf{Sybil attack}.  Bitcoin inherit the    \textbf{Sybil-resistance} property from PoW mining. Thus the PoW mining process simultaneously achieves multiple goals in  Bitcoin: (a) Sybil-resistance; (b) Randomized block proposer election; (c) Adjusting the average inter-block duration time.  
+In some other blockchain designs, there are external mechanisms to ensure that each entity only has a single key. Such a system is said to be {\em permissioned}. These blockchains will also have separate mechanisms for items (b) and (c). We will see some of these designs in later lectures. 
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\input{Problem_sets/Lec3_PS}
+
+%\section*{Appendix}
+%In this appendix, we prove that the private attack is one of the optimal adversary strategies in terms of probability of success when the adversary tries to create a fork from the {\bf genesis} in the zero network delay case (this is an idealization of the Bitcon parameter setting of mining rate of one block very ten minutes, which is much much smaller than network propagation delay).
+
+%\noindent {\bf Optimality} 
+
+%\noindent Security model: There is zero delay among honest nodes so {\bf honest blocks always appear on different heights}. If there is more than one longest chain, then the adversary controls how the honest party’s mining power is split across the multiple longest chains.
+%We assume the adversary launches the attack from the genesis block and starts mining at the same time as honest nodes (i.e., no pre-mining phase). We say the attack succeeds when the adversary at some time creates a fork from the genesis and both chains are of equal length at least $k$.
+%In Nakamoto's private attack, the adversary simply mines a chain from the genesis privately and releases the private chain when the private chain exceeds the honest chain and the honest chain has length at least $k$.
+%\begin{proof}
+%We use a random 0-1 string $w^{(n)} \in \{0,1\}^n$ to represent the randomness in the attack. $w^{(n)}_i = 0$ means that the honest nodes mine the $i$-th block and the honest block will be placed to one of the two chains according to the longest chain rule. If there is a tie, tie breaking can be in favor of the adversary. $w^{(n)}_i = 1$ means that the adversary mines the $i$-th block and the adversary can take arbitrary action (eg., keep it private, publish it, or even drop it). For any fixed $k$, given an adversarial strategy $S$, if the adversary can create a fork with length at least $k$ under string $w^{(n)}$, we call $w^{(n)}$ a $S$-bad string. Note that if $S$ is a randomized strategy, then we consider the worst case. Let $q_n^{S} = P(w^{(n)} \text{ is a } S\text{-bad string})$. Let $S^*$ be the private attack. We will prove $q_n^{S} \leq q_n^{S^*}$ for any $S$.
+%\begin{align}
+%     q_n^{S} = &P(w^{(n)} \text{ is a } S\text{-bad string}) \nonumber\\
+%  \leq  &P(\exists k \leq m \leq n/2, \text{such that \# of 0's $\leq$ \# of 1's in the first $2m$ bits in $w^{(n)}$}) \nonumber\\
+%  = &P(w^{(n)} \text{ is a } S^*\text{-bad string}) = q_n^{S^*}. \label{eqn:bound}
+%\end{align}
+
+%Note that for any strategy $S$, if $w^{(n)}$ a $S$-bad string, then both $\overline{w^{(n)}0}$ and $\overline{w^{(n)}1}$ are $S$-bad strings. So we have $q_n^{S} \leq q_{n+1}^{S}$, then by Monotone Convergence Theorem, $\lim q_n^{S}$ exists and we write it as $q^{S}$, which is the success probability of strategy $S$. Applying limit on (\ref{eqn:bound}), we get $q^{S}\leq q^{S^*}$ for any $S$, which concludes the proof.
+
+%\end{proof}
+
+%\noindent {\bf Calculation of $q^{S^*}$} 
+
+%Let $\beta$ be the fraction of adversarial mining power. We will compute $q^{S^*}$ as a function of $k$ and $\beta$.
+
+%Nakamoto \cite{nakamoto2008bitcoin} also calculates the success probability of private attack. However, Nakamoto assumes that when the honest chain has length $k$, the length of the private chain will follow a Poisson distribution with expected value $k\beta/(1-\beta)$, which is not correct. 
+%Let $Z$ be the length of the private chain at the time when the length of the honest chain reaches $k$, then the distribution of $Z$ should be
+%\begin{equation}
+%    P(Z=m) = \binom{k-1+m}{m}(1-\beta)^k \beta^m,
+%\end{equation}
+%for $m = 0,1,2,\cdots$. One can check that $E[Z] = k\beta/(1-\beta)$.
+
+%From random walk theory, the probability that the private chain can catch up the honest chain from $s$ block behind is $(\frac{\beta}{1-\beta})^s$ when $\beta<1/2$. So we have 
+%\begin{align}
+%    q^{S^*} &= \sum_{m=0}^{k} \binom{k-1+m}{m}(1-\beta)^k \beta^m (\frac{\beta}{1-\beta})^{k-m} + \sum_{m=k+1}^{\infty} \binom{k-1+m}{m}(1-\beta)^k \beta^m  \nonumber\\
+ %           &= 1 - \sum_{m=0}^{k} \binom{k-1+m}{m}[ (1-\beta)^k \beta^m - (1-\beta)^m \beta^k ]. \label{eqn:q_S}
+%\end{align}
+
+\end{document}

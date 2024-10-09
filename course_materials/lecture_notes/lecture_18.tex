@@ -1,0 +1,257 @@
+\documentclass[a4paper]{article}
+\usepackage[a4paper]{geometry}
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{makecell}
+\usepackage{threeparttable}
+\usepackage{subfig}
+\usepackage{graphicx}  
+\newsavebox{\measurebox}
+\pagestyle{fancy}
+\usepackage{tabularx} 
+\usepackage{multirow}
+\usepackage{amsfonts}
+\rhead{Principles of Blockchains}
+\lhead{Lecture 18}
+\newcommand{\POM}{$\mathsf{POM}\ $}
+\usepackage{float} 
+\usepackage{amsmath}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{graphicx}
+\graphicspath{ {./figures/} }
+\newcommand{\h}{\textsf{H}}
+\usepackage{amsthm}
+\newtheorem{lemma}{Lemma}[]
+\newcommand{\cmt}{\textsf{cmt}}
+\newcommand{\prove}{\textsf{Prove}}
+\newcommand{\verify}{\textsf{Verify}}
+\newcommand{\sn}{\textsf{sn}}
+\newcommand{\adpk}{\textsf{addr}_{\textsf{pk}}}
+\newcommand{\adsk}{\textsf{addr}_{\textsf{sk}}}
+\newcommand{\adpknew}{\textsf{addr}^{\text{new}}_{\textsf{pk}}}
+\newcommand{\adsknew}{\textsf{addr}^{\text{new}}_{\textsf{sk}}}
+\newcommand{\adpkold}{\textsf{addr}^{\text{old}}_{\textsf{pk}}}
+\newcommand{\adskold}{\textsf{addr}^{\text{old}}_{\textsf{sk}}}
+\newcommand{\tx}{\textsf{tx}}
+\newcommand{\rt}{\textsf{rt}}
+\newcommand{\info}{\textsf{info}}
+\newcommand{\pf}{\textsf{proof}}
+\newcommand{\pramod}[1]{{\color{red}
+\footnotesize[Pramod: #1] }}
+\newcommand{\peiyao}[1]{{\color{blue}
+\footnotesize[Peiyao: #1] }}
+
+\title{Lecture 18: Data Privacy via Zero Knowledge Cryptography	}
+\author{
+Principles of Blockchains, University of Illinois, \\ 
+Professor: Pramod Viswanath \\ 
+Scribe: Peiyao Sheng 
+ and Viswa Virinchi Muppirala\\
+}
+\date{March 30, 2021}
+
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+   The transactions and ledger in the blockchain designs we have seen are in plain text and world-readable. This property was crucially used to {\em validate} transactions before adding them to blocks and for blocks to be accepted into the ledger. However, there is a need to avoid representing transactions in plain text, e.g., in financial applications such as cryptocurrencies. Although banks and credit card companies inherently see the identities of participants in all transactions, the ledger themselves are not openly readable to other parties. How to provide strong identity management between relevant parties (i.e., merchants and customers), while cutting out unnecessary information leakage to middlemen is a pressing problem.  In this lecture, we 
+    summarize a powerful cryptographic technique for providing transaction privacy at the blockchain layer known as zk-SNARKs. The key idea behind zk-SNARKs is to encrypt transactions in such a way that users can verify their validity without learning anything about the contents of the transaction. zk-SNARKs are the technical foundation of the privacy-preserving cryptocurrency Zcash whose architecture is the focus of this lecture. 
+\end{abstract}
+
+\section*{Introduction}
+Bitcoin employs the UTXO format of state/ledger management, where transactions consist of a list of inputs and outputs;  outputs specify the recipients' public keys and inputs refer to previous outputs -- see  Figure~\ref{fig:utxo}. One key property of the Bitcoin network is pseudonymity;  the public key is the only information associated with each account. A single user can create multiple public keys to protect privacy. However, the relationship {\em between} transactions leads to information leakage. Based on the public keys of inputs and outputs of a transaction, we can link  transactions into a  graph; see Figure~\ref{fig:spill}. Now if the identity of one  public key is accidentally divulged, the identities of other public keys connected to it in the graph are also potentially traceable.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figures/tx_graph.png}
+    \caption{Typical transaction graph for a day \cite{fleder2015bitcoin}.}
+    \label{fig:spill}
+\end{figure}
+
+\paragraph{Trusted third-party mixer.} 
+One possible solution to this problem is to employ a third-party mixer (also known as a ``laundry service"). Consider a set of outputs from a list of transactions, when creating a new transaction with some of the outputs, UTXO system requires the sender to specify which outputs will be used. The laundry service essentially exchanges the coins (the public keys) of various users so that the public keys can't be traced using a transaction graph. However, this requires peers to trust a centralized third-party who can trace or even steal the coins. 
+
+\paragraph{Decentralized laundry system.}  As a second step, we can consider removing the trusted party for the laundry system to get a decentralized privacy service that is  directly {\em integrated} into the UTXO format. Imagine there is a special UTXO transaction with an input and an output. Instead of directly pointing to some previous output for input, we attach a proof to the input. The proof is valid when it can convince everyone that the input coin is owned by the sender and has not been spent. Besides, the proof {\em will not} reveal which output the input relates to.
+
+
+The property of not revealing connections between inputs and outputs can be achieved by {\em zero-knowledge proofs} (discussed in detail below). 
+One of the more efficient cryptographic methods to generate such proof is zk-SNARK\cite{ben2014succinct}, which stands for ``zero-knowledge, succinct and non-interactive arguments of knowledge", and it generates proofs that are short and easy to verify. Combining the zk-SNARK cryptographic tool within the UTXO framework,  Zcash\cite{sasson2014zerocash} extends Bitcoin's protocol by adding new types of transactions that provide a separate privacy-preserving currency, in which transactions reveal neither the payment's origin, destination, or amount. The new transactions also support both split and aggregation of the coins. Zcash uses zk-SNARK to generate efficient proofs which replace the traditional links between inputs and outputs. The proof is used to show that (1) the sender holds the secret keys corresponding to {\em some} of the public keys of previous outputs (the list of outputs is called {\em hiding set}); (2) and the amount spent is no more than the total amount of these outputs it holds.
+This helps in hiding both the user identity and the value of coins transferred.  In this lecture, we  study the Zcash architecture in detail and its integration atop the Bitcoin stack (see Figure~\ref{fig:utxo}).
+
+% %Zerocoin lacks in performance and needs a double-discrete-log proof to redeem funds. 
+%\pramod{this is not understandable Peiyao. The reader has no idea of what ``double-discrete-log proofs" are. Can you find a way to state the ideas at a reasonable level and then point out that the complexity is poor?}
+%This creates a large overhead on the blockchain and makes it less usable. Moreover it neither gives a mechanism to split or aggregate zerocoins nor lets the users transact in zerocoin. 
+
+
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/txs.png}
+    \caption{Left: UTXO structure where the unspent outputs from previous transactions are referred by inputs of a later transaction. Right: Zcash transaction structure with zero knowledge proof.}
+    \label{fig:utxo}
+\end{figure}
+
+
+
+\section*{Zero-knowledge Model}
+The zk-SNARK cryptographic tool is best  introduced in the context of  a basic model of a ``zero-knowledge proof system" that will be used to formalize the setting and guarantees of zero knowledge proofs. 
+
+\paragraph{Language and NP.}
+A language $L$ is a set of statements such that $L(x) = 1$  if $x\in L$. Example: if $x$ is a number, $L$ can be an indicator of whether the number is composite. 
+And NP is defined to be the class of languages $L$ that have a polynomial time verifier $V$ such that 
+
+$$L(x)=1 \iff \exists w,\ s.t.\ V(x,w)=1$$
+
+where $w$ is a polynomial sized witness, who can be used by a verifier given input $x$ to determine whether $L(x) = 1$. Example: $x$ is an integer, $L$ is testing for composite. We can find a witness here to be the prime factorization of $x$, and the verifier can testify whether the product of $w$ equals to $x$ in polynomial time.
+
+\paragraph{Prover and Zero-knowledge.}
+Now consider a language $L$ in NP, e.g. the composite testing problem. Assume there is a {\em prover} who has found a witness $w$ (the prime factorization of $x$) and wants to prove to a verifier. But the verifier only has access to $x$, so the prover's task is to convince the verifier that $x$ is composite ($L(x) = 1$). The prover can  send $w$  over and now the verifier can directly compute $V(x, w)$.  However, this way the verifier has direct access to  the witness. In the zero knowledge system, the prover wants to generate a {\em zero-knowledge proof}, using which the verifier will  learn nothing  about the specific witness $w$, while still completing the verification. 
+
+To understand how zero knowledge proofs are even possible, consider the following discrete logarithm example. Given $x$, a prover wants to prove she knows a witness $w$ such that $g^w = x$, where $g$ is a generator of a cyclic group with prime order $q$. With $w$ and $x$, a verifier is easy to verify the fact, however, to achieve zero-knowledge, the verifier only has access to $x$ and should learn nothing about $w$ during the verification process. The proving process is described as below:
+\begin{enumerate}
+    \item The prover picks a random $v\in \mathbb{Z}_q^{*}$, and sends the verifier $t = g^v$.
+    \item The verifier picks a random $c\in \mathbb{Z}_q^{*}$ and sends it back to the prover.
+    \item The prover computes $r=v-cw$ and returns $r$ to the verifier.
+    \item Finally the verifier checks whether the condition $t=g^rx^c$ holds.
+\end{enumerate}
+When prover really knows $w$, it’s easy to verify the correctness (Completeness). And it can be proved that another party who does not know $w$ can construct such proofs with negligible probability (Soundness). And as we can see, during the proof and verification process, witness $w$ is wrapped with random numbers so the verifier still learns {\em nothing} about the witness, hence the term ``zero knowledge". Besides this example, we can construct zero knowledge proofs for many other problems. The remarkable fact is that all languages in NP have zero knowledge proofs. \cite{goldreich1986prove}.  In this lecture we  treat zero knowledge proofs as a black box interface (represented by the zk-SNARK cryptographic library) and learn how to invoke it appropriately.
+
+
+
+
+%\pramod{zk seems like magic from the above description. we need to give some intuition for  how zk is even remotely possible. even a high level intuition and an example will go a long way in educating the reader (and ourselves).}\pramod{Now you can state the punchline, which is all NP languages have zk proofs.} 
+
+\paragraph{Efficiency.}  
+The performance of the cryptographic tools (e.g., how long it takes to generate the proof or verify the proof, how large is the proof size) are critical to practical usage.  
+We denote the execution time required to run $V(x,w)$ by $T$; this is the baseline complexity of verification. We consider four metrics of complexity of zero knowledge proof systems. 
+\begin{itemize}
+    \item  {\em Prover complexity}. Efficient provers can generate proofs in expected time $O(T \log T)$. The complexity is only marginally more compared to the baseline. 
+    \item  {\em Verification complexity and proof size}. A desirable characteristic of such proof systems is succinctness, informally meaning that the proof size is small and thus can be verified efficiently. Succinct proof sizes of  constant or logarithmic compared to the statement size are possible and  thus can be validated in expected time $O(1)$ or $O(\log T)$. Although the complexity is sublinear, the constants are large and verification is not that efficient for practice usage (e.g., in Zcash). 
+    \item {\em Interactivity of verification}. Most zero knowledge protocols are interactive, including the example we discussed above. However, noninteractive proofs are most attractive for blockchain applications. Although a generic  technique  to convert interactive protocols into noninteractive protocols while retaining security properties exists (the \href{https://en.wikipedia.org/wiki/Fiat–Shamir_heuristic}{Fiat-Shamir heuristic}), it works under ideal conditions (including needing a random oracle model) and a more tailored approach is  of interest in practice. %\pramod{point out how interactive proofs can be much less complex and some intuition for how they work and why they can be more efficient.}
+    \item {\em Setup assumptions}. Many zero knowledge protocols depend on a ``trusted setup", e.g. zk-SNARKs. Specifically, the parameters necessary to generate and verify the proofs must be computed by a trusted party. Otherwise, the protocol could be reverted and the money can be generated in the air. To improve on this, protocols like zk-STARKs (Zero-Knowledge Scalable Transparent ARguments of Knowledge) utilize publicly verifiable randomness instead of trusted setup to create trustlessly verifiable computation systems. The engineering of these theoretical cryptographic concepts into practical libraries is presently being actively pursued. 
+    %\pramod{explain trusted setup. players need common randomness and need to generate in a distributed manner, etc. Need to be as detailed as possible on what this is. here you will talk about zk-SNARK and zk-STARKs.} 
+\end{itemize} 
+
+
+
+\section*{From Zero Knowledge Proof Systems to Zcash}\label{sec:def}
+We connect anonymity in Bitcoin to zero knowledge proof systems by first  defining new data structures and addressing mechanisms  on top of Bitcoin architecture.
+\begin{enumerate}
+    \item \textbf{Address.} Same as Bitcoin, there are two types of addresses, public key address $\adpk$ and secret key address $\adsk$. 
+    \item \textbf{A coin in Zcash} We define a coin $c$, which has the same role as a transaction output of Bitcoin, with the following attributes,
+    \begin{itemize}
+        \item[-] Coin commitment $\cmt(c)$
+        \item[-] Coin value $v(c)$
+        \item[-] Coin serial number $\sn(c)$
+        \item[-] Coin address $\adpk(c)$
+        %\item[-] Trapdoor random values $\rho, r, s$
+    \end{itemize}
+    The commitment of a coin can be thought of a hash of all the data contained in the coin and serial number can be thought of as an output of a pseudo-random generator. %Figure ~\ref{fig:coin} shows how the attributes of a coin are generated.
+    %\begin{figure}
+    %    \centering
+    %    \includegraphics[height = 7 cm]{figures/Zcash_coin.png}
+    %    \caption{The attributes and the block diagram of how they're generated are shown here}
+    %    \label{fig:coin}
+    %\end{figure}
+    A collision-resistant hash function like the SHA256 compression function is used to generate all the addresses and the coin attributes. 
+    % Let $\lambda$ denote the security parameter. We use collision-resistant pseudorandom functions family $PRF = \{ PRF_x : \{0,1\}^* \rightarrow \{0,1\}^{O(\lambda)}\}_x$ where $x$ is the seed. In our case the secret key will act as the seed. We derive
+    \item \textbf{Pour transaction structure.} A pour transaction is a transaction that contains two inputs and two outputs. Compared to Bitcoin transactions, the pour transaction consumes the input coins by revealing their serial numbers, but does not reveal any other information such as the values of the input or output coins, or the addresses of their owners. All the publicly visible information of the transaction can be denoted as $$\tx:=(\rt, \sn_1^{\text{old}}, \sn_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}}, v_{\text{pub}}, \info, \pf)$$ where \rt\ is the Merkle root, the inputs are serial numbers of two old coins, the outputs are commitments of two new coins. $v_{\text{pub}}$ is the fraction of the input value that may be publicly revealed (optional) , \info\ a transaction string (optional) and \pf\ is used to prove the ownership of the old coins and the validity of the transaction. The pour transaction takes two coins as inputs and outputs so that it can implement both split and aggregation of the coins. If two coins can be split or aggregated in a pour transaction, multiple coins can be split or aggregated in multiple pour transactions. The details of these properties will be discussed below.
+\end{enumerate}
+
+\section*{Zcash Framework}
+We begin by formalizing the transaction linkage problem that the UTXO state management system of Bitcoin faces. We would like to design a {\em pour transaction} that creates two new coins from  two old coins without revealing the information of the coins (especially the public keys).
+
+\paragraph{First Attempt: use commitment}. 
+The first attempt is to create the transaction only with the commitments of coins, i.e. a pour transaction contains
+$(\cmt_1^{\text{old}}, \cmt_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}}, \pf)$. And the proof should imply 
+\begin{enumerate}
+    \item [(1)] the one who provides the proof has access to the old and new coins
+    \item [(2)] the coins satisfy $v(c_1^{\text{old}}) + v(c_2^{\text{old}}) \ge v(c_1^{\text{new}}) + v(c_2^{\text{new}})$
+    \item[(3)]it has access to $\adsk(c_1^{\text{old}})$ and $\adsk(c_2^{\text{old}})$.
+\end{enumerate}
+
+We can state this problem formulation as an NP statement, black-boxing   the zero knowledge proof generation process. The statement contains:
+\begin{itemize}
+    \item $x = (\cmt_1^{\text{old}}, \cmt_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}})$; 
+    \item $L(x)$ is an indicator of whether $x$ is a valid pour transaction. $L(x)=1$ if $x$ is a valid pour transaction;
+    \item we define the witness $w = (c_1^{\text{old}}, c_2^{\text{old}}, c_1^{\text{new}}, c_2^{\text{new}}, \adsk(c_1^{\text{old}}), \adsk(c_2^{\text{old}}))$.
+\end{itemize}   Given $x$ and $w$, a verifier $V(x,w)=1$ if the following conditions are true:
+\begin{itemize}
+    \item [-] $(\cmt(c_1^{\text{old}}), \cmt(c_2^{\text{old}}), \cmt(c_1^{\text{new}}), \cmt(c_2^{\text{new}})) = x$
+    \item [-] $v(c_1^{\text{old}}) + v(c_2^{\text{old}}) \ge v(c_1^{\text{new}}) + v(c_2^{\text{new}})$
+    \item [-] $\adpk(c_1^{\text{old}})$ matches $\adsk(c_1^{\text{old}})$ and $\adpk(c_2^{\text{old}})$ matches $\adsk(c_2^{\text{old}})$
+\end{itemize}
+It is easy to see that $L(x)=1\iff V(x,w)=1$.
+
+The methodology is to convert these statements into {\em algebraic circuits} and the proof is generated by ``circuit satisfiability". The proof is an encrypted tuple $\pi = [g^H, g^Z]$, where $H$ and $Z$ are polynomials computed during the proving phase, and there is a verifying key $vk = g^T$. We recall in the example of the discrete logarithm  above, the proving process did not reveal the information of the witness since it is hard to revert the logarithm. An example construction can be found in this \href{https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649}{post} for further reading. %\pramod{this is a great place to connect to the original intuition on how zk proofs are even possible in the first place.}
+Now anyone in the blockchain who has access to $w$ can generate the proof without revealing any information related to $w$, and anyone who has access to $x$ can verify the validity of the transaction. But this method has a vulnerability that the commitment is still traceable.
+
+\paragraph{Second Attempt: use two types of commitments} An idea to improve on the previous formulation is to use two types of commitments. The first is normal commitment \cmt\ and the second is a unique serial number \sn\  (generated by a pseudo-random generator).  In a transaction, we use serial numbers to represent old coins and commitments to represent new coins, i.e., the transaction includes $(\rt, \sn_1^{\text{old}}, \sn_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}}, \pf)$, where \rt\ specifies the Merkle-tree root of the commitments of outputs in the ledger. The witness is still the same, $w = (\rt, c_1^{\text{old}}, c_2^{\text{old}}, c_1^{\text{new}}, c_2^{\text{new}}, \adsk(c_1^{\text{old}}), \adsk(c_2^{\text{old}}))$. And again $L(x)=1\iff V(x,w)=1$, $V(x,w)=1$ if the following conditions are true:
+
+For $i\in \{1,2\}$
+\begin{itemize}
+    \item [-] The commitments $\cmt_i$ of $c_i^{\text{new}}$ appear on the ledger, verified using the Merkle-tree root $\rt$, i.e., $\cmt(c_1^{\text{new}}) \in \rt \land \cmt(c_2^{\text{new}}) \in \rt$.
+    \item [-] The address secret key ${\adskold}_{,i}$ matches the address public key of $c_i^{\text{old}}$ %through ${\adpkold}_{,i} = \mathcal{H}({\adskold}_{,i}\|00\|0)$
+    % \item [-] The serial number $\sn^{\text{old}}_i$ matches that of $c_i^{\text{old}}$ through $\sn_i^{\text{old}} = \mathcal{H}({\adskold}_{,i}\|01\|\rho_i^{\text{old}})$.
+    % \item [-] The coin $c_i^{\text{old}}$ is well formed through $\cmt_i^{\text{old}} =$ 
+    \item [-] $(\sn(c_1^{\text{old}}), \sn(c_2^{\text{old}}), \cmt(c_1^{\text{new}}), \cmt(c_2^{\text{new}})) = (\sn_1^{\text{old}}, \sn_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}})$
+    \item [-] $v(c_1^{\text{old}}) + v(c_2^{\text{old}}) \ge v(c_1^{\text{new}}) + v(c_2^{\text{new}})$. 
+\end{itemize}
+
+Similar to the previous formulation, those who have $w$ can generate the proof and who have $x$ can verify the validity. However, compared to the previous method, there is no direct connection between old coins and new coins since they use different types of commitments. The only concern is that without the connection, how can we know which previous output is being spent? To solve this problem, we record all serial numbers appearing in previous transactions as a {\em nullifier set} and conduct an additional check to see whether the input serial number is already in the nullifier set.
+
+
+\section*{Zcash Protocol: Putting it all together}
+The key  modification of Bitcoin made by Zcash  is the introduction of pour transactions. Different from a normal UTXO transaction, the inputs and outputs of a pour transaction are replaced by the commitments and serial numbers to break the link between old and new coins.
+
+\paragraph{Create a pour transaction.} 
+Based on the second solution, the full structure of a pour transaction (as  defined earlier) contains $(\rt, \sn_1^{\text{old}}, \sn_2^{\text{old}}, \cmt_1^{\text{new}}, \cmt_2^{\text{new}}, v_{\text{pub}}, \info, \pf)$. To create a pour transaction, the sender needs to have the following information (see Figure~\ref{fig:tx_gen}):
+\begin{itemize}
+    \item [-] Old coins $c_1^{\text{old}}, c_2^{\text{old}}$;
+    \item [-] Secret keys of old coins $\adsk(c_1^{\text{old}}), \adsk(c_2^{\text{old}})$;
+    \item [-] New values $v_1^{\text{new}}, v_2^{\text{new}}$; 
+    \item [-] Public value $v_{\text{pub}}$ s.t. $v_1^{\text{old}} + v_2^{\text{old}} \ge v_1^{\text{new}} + v_2^{\text{new}} + v_{pub}$;
+    \item [-] New addresses $\adpk(c_1^{\text{new}}), \adpk(c_2^{\text{new}})$.
+\end{itemize}
+
+\begin{figure}
+\centering
+\begin{minipage}{.5\textwidth}
+  \centering
+  \includegraphics[width=.8\linewidth]{figures/tx_generator.png}
+  \captionof{figure}{Generate a pour transaction.}
+  \label{fig:tx_gen}
+\end{minipage}%
+\begin{minipage}{.5\textwidth}
+  \centering
+  \includegraphics[width=.7\linewidth]{figures/zk-SNARK.png}
+  \captionof{figure}{Generate a zk-SNARK proof.}
+  \label{fig:proof_gen}
+\end{minipage}
+\end{figure}
+In a real system, a transaction generator can be called by a sender given required information to generate a pour transaction and the new coins. Then the new coins will be sent to the recipients off chain and the transaction will be posted on chain.  
+
+\paragraph{Generate a  zk-SNARK proof.}  zk-SNARK is a cryptographic  zero knowledge, succinct and a non-interactive verification method. When a prover knows the witness for an NP-statement, they can produce a short proof that can be verified by anyone without revealing the witness. The NP-statements we will encounter in Zcash are going to be satisfiability statements such as ``the hash function matches this particular value for this particular input''. As a library, there are three polynomial time algorithms during the proving process, $\textsf{KeyGen}$, $\prove$ and $\verify$. $\textsf{KeyGen}$ is the trusted setup which generates proving and verifying keys, $pk$ and $vk$ respectively once and for all. The function $\prove$ takes $pk$, the witness $w$ and the public input $x$ to output a short proof $\pi = \prove(pk,w,x)$. The function $\verify$ takes $vk$, the public input $x$ and the proof $\pi$ and outputs a Boolean value $\verify(vk,x,\pi)$.
+
+
+
+
+\paragraph{Incentives in Zcash.} Zcash is a fork of Bitcoin main chain, and still follows the same basic protocol with an added privacy-preserving service. So the incentives in Zcash are identical  to that in the Bitcoin protocol, including both mining rewards and  transaction fees. Since the zk proof verification process is efficient, the increased  verification time is not significant (especially given the slow mining rate in Bitcoin). 
+
+
+\section*{References}
+ Zerocoin~\cite{6547123} extends Bitcoin to provide a decentralized laundry system using zero knowledge proofs. Zero-knowledge proofs allow users to periodically convert their bitcoins into zerocoins of fixed denominations and later provide a proof that they own one of the zerocoins to recover their bitcoins. However, the proof used by Zerocoin is not efficient, which creates a large overhead on the blockchain and makes it less usable. Moreover, it neither gives a mechanism to split or aggregate zerocoins nor lets the users transact in zerocoin, routine day-to-day transactions are still conducted in Bitcoin.
+
+The Zcash architecture discussed in this lecture was originally proposed in \href{https://eprint.iacr.org/2014/349}{this manuscript}. A more informal description is presented \href{https://z.cash/technology/}{here}. The zk-SNARK library is described informally \href{https://z.cash/technology/zksnarks/}{here}. 
+
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
