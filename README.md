@@ -55,7 +55,7 @@ Data entries will be collected via Google Forms.
 3. **Rationale:** Provide a detailed rationale explaining why the data you created is beneficial for improving AI performance on these tasks.
 
 ### **Deliverables**
-Each group should submit at least 10 data entries. Due date: Oct 24, 10pm. 
+Each group should submit at least 10 data entries. Due date: Oct 30, 9pm. 
 
 ### **Baseline**
 
@@ -133,6 +133,6 @@ Final Code, prompt, and report are due on Dean's Date (Dec 13). No extension is 
 
 
 ## **Important Dates**
-- **Stage 1: Dataset Creation** — Submission by Google Form, due **Oct 24, 10pm**.
+- **Stage 1: Dataset Creation** — Submission by Google Form, due **Oct 30, 9pm**.
 - **Stage 2: Dataset Evaluation** — Peer review by Google Form, due **Nov 4, 10pm**. Interim report on Canvas, due **Nov 8, 10pm**.
 - **Stage 3: AI-Assistant Tuning** — Presentation slides due **1:30pm on presentation day (Nov 15 or Nov 22)**. Final code/prompt and report due Dean's date (**Dec 13, 11:59pm**). 
