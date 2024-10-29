@@ -98,10 +98,10 @@ You will be assigned a set of data entries created by other groups. Your job is 
 - The average grade of all data entries you grade should be around 90 out of 100, but certain upshifts or downshifts are certainly acceptable as long as your rubrics and reviews are clear.
 
 ### **Deliverables**
-Each group will review and evaluate other groups' data entries within the same category. Reviews should be submitted via Google form. Due date: Nov 4, 10pm. 
+Each group will review and evaluate other groups' data entries within the same category. Reviews should be submitted via Google form. Due date: Nov 11, 10pm. 
 Based on your own experience when creating the data entries and reviewing others' dataset entry, each group will produce an interim report on:
 (1) What are the properties of a good dataset entry; (2) Any strategy or thought for creating a data entry.
-Due date: Nov 8, 10pm.
+Due date: Nov 14, 10pm.
 
 
 ### **Example Rubrics for Evaluating a Data Entry**
@@ -121,7 +121,7 @@ Due date: Nov 8, 10pm.
 After creating and evaluating the dataset, students will use the top entries to fine-tune an AI assistant. You may use any free-access-to-all (e.g. GPT-4o, Llama, but you shouldn't use any paid services) methods and their combination to try to improve AI’s performance on these tasks. The objective is to explore different ways of enhancing the AI’s ability to solve challenging blockchain problems using the dataset created by students.
 
 ### **Deliverables**
-1. **Presentation:** On Nov 15 and Nov 22, each group will present their current findings in class. You can talk about your report in stage 1 and 2, your ideas for stage 3, etc. Each group will have 6 minutes to present and 2 minutes for the Q&A session. 
+1. **Demo day:** On Nov 15 and Nov 22, each group will present anything they find interesting in class. If you talk about the final project of AI assistant creation, you can discuss your report in stage 1 and 2, your ideas for stage 3, etc. Each group will have 8 minutes in total for demo and Q&A session. We suggest a split of 6min/2min for demo/Q&A, but it's fully up to you to decide.
 2. **Final Code or Prompt:** Submit the final version of your code or prompts used for fine-tuning or improving AI's performance.
 3. **Final Report:** Write a report summarizing the method you used, why you chose it, and how effective it was. Due to the time limit, you may not have enough time to implement the ideas, especially if you choose to fine-tune open-source models. You can sketch your idea and predict possible outcomes in your report. Also, you can summarize the best practices for using AI as a learning assistant in this course.
 Final Code, prompt, and report are due on Dean's Date (Dec 13). No extension is allowed according to the university's regulations. 
@@ -134,5 +134,5 @@ Final Code, prompt, and report are due on Dean's Date (Dec 13). No extension is 
 
 ## **Important Dates**
 - **Stage 1: Dataset Creation** — Submission by Google Form, due **Oct 30, 9pm**.
-- **Stage 2: Dataset Evaluation** — Peer review by Google Form, due **Nov 4, 10pm**. Interim report on Canvas, due **Nov 8, 10pm**.
+- **Stage 2: Dataset Evaluation** — Peer review by Google Form, due **Nov 11, 10pm**. Interim report on Canvas, due **Nov 14, 10pm**.
 - **Stage 3: AI-Assistant Tuning** — Presentation slides due **1:30pm on presentation day (Nov 15 or Nov 22)**. Final code/prompt and report due Dean's date (**Dec 13, 11:59pm**). 
